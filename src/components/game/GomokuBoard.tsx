@@ -104,6 +104,10 @@ const Cell = styled.button<CellProps>`
   &:active:not(:disabled) {
     transform: scale(0.9);
   }
+
+  &:disabled {
+    opacity: 1;
+  }
 `
 
 interface StoneProps {
