@@ -40,22 +40,24 @@ src/
 │   │   ├── SignupForm.tsx           # 눈 표시 + 비밀번호 확인 + 에러 한국어화
 │   │   └── ProtectedRoute.tsx
 │   └── game/
-│       └── TicTacToeBoard.tsx       # props: state, result, isAIThinking, isMyTurn, isPvp, onCellClick
+│       ├── TicTacToeBoard.tsx       # props: state, result, isAIThinking, isMyTurn, isPvp, onCellClick
+│       └── GomokuBoard.tsx          # 15x15 바둑판, 흑백돌 렌더링, lastMove 강조
 ├── hooks/
 │   └── useAuth.ts
 ├── lib/
 │   ├── supabase.ts
 │   └── game-logic/
-│       └── tictactoe.ts             # 순수 게임 로직 + 미니맥스 AI
+│       ├── tictactoe.ts             # 순수 게임 로직 + 미니맥스 AI
+│       └── gomoku.ts                # GomokuState/Result + 알파베타 AI (깊이 2/4)
 ├── pages/
 │   ├── LoginPage.tsx
 │   ├── SignupPage.tsx
-│   ├── HomePage.tsx                 # 모드 선택(AI/PvP) → 난이도 바텀시트 2단계
+│   ├── HomePage.tsx                 # 게임 카드(틱택토/오목) → 모드/난이도 바텀시트
 │   ├── LobbyPage.tsx                # PvP 로비: 대기방 목록(Realtime+폴링) + 새 게임 + 초대링크
-│   └── GamePage.tsx                 # waiting 대기화면 / active 게임화면 / 결과 바텀시트
+│   └── GamePage.tsx                 # game.game_type_id 기준 보드 조건부 렌더링
 ├── store/
 │   ├── authStore.ts
-│   └── gameStore.ts                 # startNewGame, createPvpGame, joinGame, makeMove, subscribeToGame, reset
+│   └── gameStore.ts                 # GameTypeId 타입, startNewGame/createPvpGame에 gameTypeId 파라미터
 └── types/
     └── database.ts
 
@@ -63,6 +65,8 @@ supabase/migrations/
 ├── 20260218080941_initial_schema.sql   # profiles, handle_new_user 트리거
 ├── 20260218081913_add_game_types.sql   # game_types, games, moves
 └── 20260218090000_pvp_support.sql      # PvP: CONSTRAINT 수정, RLS 추가 (SQL Editor에서 수동 실행)
+
+# gomoku game_types 행은 SQL Editor에서 수동 INSERT (마이그레이션 파일 없음)
 
 .claude/
 ├── settings.local.json

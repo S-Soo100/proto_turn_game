@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useGameStore } from '@/store/gameStore'
 import { useAuthStore } from '@/store/authStore'
 import type { AIDifficulty } from '@/types/database'
+import type { GameTypeId } from '@/store/gameStore'
 
 type SheetStep = 'mode' | 'difficulty'
 
@@ -299,11 +300,15 @@ const ModeDesc = styled.div`font-size: 12px; color: #6b7280; margin-top: 2px;`
 const DIFFICULTIES: { value: AIDifficulty; emoji: string; name: string; desc: string }[] = [
   { value: 'easy', emoji: '😊', name: '쉬움', desc: '무작위로 둡니다' },
   { value: 'medium', emoji: '🤔', name: '보통', desc: '가끔 최선의 수를 둡니다' },
-  { value: 'hard', emoji: '🤖', name: '어려움', desc: '완벽한 플레이 (미니맥스 AI)' },
+  { value: 'hard', emoji: '🤖', name: '어려움', desc: '알파베타 가지치기 AI' },
+]
+
+const ACTIVE_GAMES: { gameTypeId: GameTypeId; emoji: string; name: string; desc: string }[] = [
+  { gameTypeId: 'tictactoe', emoji: '✕⊙', name: '틱택토', desc: '3x3 보드에서 3개 연속으로 이기세요' },
+  { gameTypeId: 'gomoku', emoji: '⚫', name: '오목', desc: '15x15 보드에서 5개 연속으로 이기세요' },
 ]
 
 const FUTURE_GAMES = [
-  { emoji: '⚫', name: '오목', desc: '19x19 보드에서 5개 연결' },
   { emoji: '♟️', name: '체스', desc: '클래식 2인 전략 게임' },
 ]
 
@@ -318,9 +323,11 @@ export function HomePage() {
   const [showSheet, setShowSheet] = useState(false)
   const [sheetStep, setSheetStep] = useState<SheetStep>('mode')
   const [selectedDiff, setSelectedDiff] = useState<AIDifficulty>('medium')
+  const [selectedGameType, setSelectedGameType] = useState<GameTypeId>('tictactoe')
   const [isStarting, setIsStarting] = useState(false)
 
-  function handleOpenSheet() {
+  function handleOpenSheet(gameTypeId: GameTypeId) {
+    setSelectedGameType(gameTypeId)
     setSheetStep('mode')
     setShowSheet(true)
   }
@@ -338,12 +345,14 @@ export function HomePage() {
     if (!profile) return
     setIsStarting(true)
     try {
-      const gameId = await startNewGame(profile.id, selectedDiff)
+      const gameId = await startNewGame(profile.id, selectedDiff, selectedGameType)
       navigate(`/game/${gameId}`)
     } finally {
       setIsStarting(false)
     }
   }
+
+  const selectedGame = ACTIVE_GAMES.find((g) => g.gameTypeId === selectedGameType)
 
   const initial = profile?.username?.charAt(0).toUpperCase() ?? '?'
 
@@ -367,14 +376,16 @@ export function HomePage() {
         {/* Game list */}
         <SectionTitle>게임 선택</SectionTitle>
 
-        <GameCard onClick={handleOpenSheet}>
-          <GameEmoji>✕⊙</GameEmoji>
-          <GameInfo>
-            <GameName>틱택토</GameName>
-            <GameDesc>3x3 보드에서 3개 연속으로 이기세요</GameDesc>
-          </GameInfo>
-          <PlayIcon>▶</PlayIcon>
-        </GameCard>
+        {ACTIVE_GAMES.map((g) => (
+          <GameCard key={g.gameTypeId} onClick={() => handleOpenSheet(g.gameTypeId)}>
+            <GameEmoji>{g.emoji}</GameEmoji>
+            <GameInfo>
+              <GameName>{g.name}</GameName>
+              <GameDesc>{g.desc}</GameDesc>
+            </GameInfo>
+            <PlayIcon>▶</PlayIcon>
+          </GameCard>
+        ))}
 
         {FUTURE_GAMES.map((g) => (
           <GameCard key={g.name} disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>
@@ -408,7 +419,7 @@ export function HomePage() {
 
               {sheetStep === 'mode' ? (
                 <>
-                  <SheetTitle>틱택토</SheetTitle>
+                  <SheetTitle>{selectedGame?.name ?? '게임'}</SheetTitle>
                   <SheetSub>게임 모드를 선택하세요</SheetSub>
                   <ModeList>
                     <ModeButton selected={false} onClick={() => handleSelectMode('ai')}>

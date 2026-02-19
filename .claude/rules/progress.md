@@ -39,9 +39,30 @@
   - `LobbyPage` (`/lobby`) — 대기 중인 게임 목록 (Realtime + 2초 폴링) + 새 게임 만들기 + 초대 링크 복사
   - `GamePage` — waiting/active 상태 분기, PvP 플레이어 바 (내 차례 강조), 결과 화면
 
+### 4단계: 오목 게임 추가 ✅
+- **DB**: `game_types`에 `gomoku` 행 추가
+  - **⚠️ Supabase SQL Editor에서 수동 실행 필요**
+- **Game Logic**: `src/lib/game-logic/gomoku.ts`
+  - `GomokuState` (15x15 flat grid, lastMove), `GomokuResult` (5개 winLine)
+  - `checkResult` — 4방향 동적 스캔 (수평/수직/대각선↘↙)
+  - `getAIMove` — 난이도별 알파베타 가지치기 AI
+    - easy: 기존 돌 주변 2칸 내 랜덤
+    - medium: 알파베타 깊이 2 + 30% 랜덤
+    - hard: 알파베타 깊이 4
+- **Component**: `src/components/game/GomokuBoard.tsx`
+  - 바둑판 스타일 15x15, 돌 렌더링 (흑/백 원형)
+  - 마지막 수 황색 강조 (`lastMove`), 승리 5칸 금색 링 강조
+  - 호버 시 돌 미리보기
+- **Store 확장** (`gameStore.ts`):
+  - `GameTypeId = 'tictactoe' | 'gomoku'` 타입 추가
+  - `startNewGame(playerId, difficulty, gameTypeId?)`, `createPvpGame(playerId, gameTypeId?)` 파라미터 추가
+  - `parseBoardState`, `checkAnyResult` 헬퍼로 게임 타입별 분기
+- **GamePage 수정**: `game.game_type_id` 기준 `<GomokuBoard>` vs `<TicTacToeBoard>` 조건부 렌더링
+- **HomePage 수정**: 오목 카드 활성화 (`ACTIVE_GAMES` 배열로 분리), 게임별 바텀시트 타이틀 동적 표시
+
 ## 다음 단계 (미구현)
-- 오목 게임 추가
 - ELO 레이팅 시스템 실제 반영 (게임 종료 시 점수 계산)
 - 게임 히스토리 페이지
 - 방 나가기 시 상대방에게 알림
 - Supabase Realtime 정식 활성화 (`ALTER TABLE games REPLICA IDENTITY FULL;` + Dashboard Realtime 탭)
+- 오목 PvP 로비에서 게임 타입 구분 표시

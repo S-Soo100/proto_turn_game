@@ -6,6 +6,9 @@ import { useGameStore } from '@/store/gameStore'
 import { useAuthStore } from '@/store/authStore'
 import { supabase } from '@/lib/supabase'
 import { TicTacToeBoard } from '@/components/game/TicTacToeBoard'
+import { GomokuBoard } from '@/components/game/GomokuBoard'
+import type { TicTacToeState, GameResult as TicTacToeResult } from '@/lib/game-logic/tictactoe'
+import type { GomokuState, GomokuResult } from '@/lib/game-logic/gomoku'
 
 const Page = styled.div`
   min-height: 100dvh;
@@ -217,21 +220,24 @@ const SecondaryButton = styled.button`
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function getResultContent(winner: 'X' | 'O' | null, winnerId: string | null, myId: string, isPvp: boolean) {
-  // Draw
+function getResultContent(
+  winner: string | null,
+  winnerId: string | null,
+  myId: string,
+  isPvp: boolean,
+  isGomoku: boolean,
+) {
   if (winner === null) return { emoji: '🤝', title: '무승부', sub: '아슬아슬했네요!' }
   if (isPvp) {
-    // winnerId is the UUID of the winner stored in games.winner
-    // null winnerId with winner=null is draw (handled above)
-    // If winnerId is null but winner is not null, something is wrong — show draw
     if (!winnerId) return { emoji: '🤝', title: '무승부', sub: '아슬아슬했네요!' }
     const iWon = winnerId === myId
     return iWon
       ? { emoji: '🎉', title: '승리!', sub: '완벽한 플레이입니다.' }
       : { emoji: '😔', title: '패배', sub: '다시 도전해보세요!' }
   }
-  // AI game: X is always the player
-  return winner === 'X'
+  // AI game: player is always first mark (X for TicTacToe, B for Gomoku)
+  const playerMark = isGomoku ? 'B' : 'X'
+  return winner === playerMark
     ? { emoji: '🎉', title: '승리!', sub: '완벽한 플레이입니다.' }
     : { emoji: '😔', title: '패배', sub: '다시 도전해보세요!' }
 }
@@ -302,7 +308,8 @@ export function GamePage() {
     if (!profile || !game) return
     if (game.is_ai_opponent) {
       const difficulty = game.ai_difficulty ?? 'medium'
-      const newId = await startNewGame(profile.id, difficulty)
+      const gameTypeId = (game.game_type_id ?? 'tictactoe') as 'tictactoe' | 'gomoku'
+      const newId = await startNewGame(profile.id, difficulty, gameTypeId)
       navigate(`/game/${newId}`, { replace: true })
     } else {
       navigate('/lobby')
@@ -323,13 +330,20 @@ export function GamePage() {
   const isPvp = !game.is_ai_opponent
   const isMyTurn = game.current_turn === myId
   const isWaiting = game.status === 'waiting'
+  const isGomoku = game.game_type_id === 'gomoku'
 
-  // PvP: determine marks
-  const myMark = game.player_white === myId ? 'X' : 'O'
-  const opponentMark = myMark === 'X' ? 'O' : 'X'
+  // PvP: determine marks (B/W for Gomoku, X/O for TicTacToe)
+  const myMark = game.player_white === myId
+    ? (isGomoku ? 'B(⚫)' : 'X')
+    : (isGomoku ? 'W(⚪)' : 'O')
+  const opponentMark = game.player_white === myId
+    ? (isGomoku ? 'W(⚪)' : 'O')
+    : (isGomoku ? 'B(⚫)' : 'X')
+
+  const gameTitle = isGomoku ? '오목' : '틱택토'
 
   const resultContent = result
-    ? getResultContent(result.winner, game.winner, myId, isPvp)
+    ? getResultContent(result.winner, game.winner, myId, isPvp, isGomoku)
     : null
 
   const inviteUrl = `${window.location.origin}/game/${gameId}?join=1`
@@ -338,7 +352,7 @@ export function GamePage() {
     <Page>
       <TopBar>
         <BackButton onClick={() => navigate(isPvp ? '/lobby' : '/')} aria-label="뒤로">←</BackButton>
-        <GameTitle>틱택토</GameTitle>
+        <GameTitle>{gameTitle}</GameTitle>
         {isPvp
           ? <Badge>PvP</Badge>
           : <Badge>{game.ai_difficulty ?? 'medium'}</Badge>
@@ -377,10 +391,19 @@ export function GamePage() {
               </CopyButton>
             </LinkBox>
           </WaitingCard>
+        ) : isGomoku ? (
+          <GomokuBoard
+            state={boardState as GomokuState}
+            result={result as GomokuResult | null}
+            isAIThinking={isAIThinking}
+            isMyTurn={isMyTurn}
+            isPvp={isPvp}
+            onCellClick={(index) => makeMove(index, myId)}
+          />
         ) : (
           <TicTacToeBoard
-            state={boardState}
-            result={result}
+            state={boardState as TicTacToeState}
+            result={result as TicTacToeResult | null}
             isAIThinking={isAIThinking}
             isMyTurn={isMyTurn}
             isPvp={isPvp}

@@ -1,24 +1,47 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
 import {
-  createInitialState,
-  applyMove,
-  checkResult,
-  getAIMove,
+  createInitialState as createTicTacToeState,
+  applyMove as applyTicTacToeMove,
+  checkResult as checkTicTacToeResult,
+  getAIMove as getTicTacToeAIMove,
   type TicTacToeState,
-  type GameResult,
+  type GameResult as TicTacToeResult,
 } from '@/lib/game-logic/tictactoe'
+import {
+  createInitialState as createGomokuState,
+  applyMove as applyGomokuMove,
+  checkResult as checkGomokuResult,
+  getAIMove as getGomokuAIMove,
+  type GomokuState,
+  type GomokuResult,
+} from '@/lib/game-logic/gomoku'
 import type { Game, AIDifficulty } from '@/types/database'
+
+export type GameTypeId = 'tictactoe' | 'gomoku'
+export type BoardState = TicTacToeState | GomokuState
+export type AnyResult = TicTacToeResult | GomokuResult
+
+function parseBoardState(game: Game): BoardState {
+  const raw = game.board_state as unknown
+  if (game.game_type_id === 'gomoku') return raw as GomokuState
+  return raw as TicTacToeState
+}
+
+function checkAnyResult(game: Game, boardState: BoardState): AnyResult | null {
+  if (game.game_type_id === 'gomoku') return checkGomokuResult(boardState as GomokuState)
+  return checkTicTacToeResult(boardState as TicTacToeState)
+}
 
 interface GameStore {
   game: Game | null
-  boardState: TicTacToeState | null
-  result: GameResult | null
+  boardState: BoardState | null
+  result: AnyResult | null
   isAIThinking: boolean
   opponentProfile: { id: string; username: string } | null
 
-  startNewGame: (playerId: string, difficulty: AIDifficulty) => Promise<string>
-  createPvpGame: (playerId: string) => Promise<string>
+  startNewGame: (playerId: string, difficulty: AIDifficulty, gameTypeId?: GameTypeId) => Promise<string>
+  createPvpGame: (playerId: string, gameTypeId?: GameTypeId) => Promise<string>
   joinGame: (gameId: string, playerId: string) => Promise<void>
   loadGame: (gameId: string) => Promise<void>
   makeMove: (index: number, myId: string) => Promise<void>
@@ -33,13 +56,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isAIThinking: false,
   opponentProfile: null,
 
-  startNewGame: async (playerId, difficulty) => {
-    const initial = createInitialState()
+  startNewGame: async (playerId, difficulty, gameTypeId = 'tictactoe') => {
+    const initial = gameTypeId === 'gomoku' ? createGomokuState() : createTicTacToeState()
 
     const { data, error } = await supabase
       .from('games')
       .insert({
-        game_type_id: 'tictactoe',
+        game_type_id: gameTypeId,
         player_white: playerId,
         is_ai_opponent: true,
         ai_difficulty: difficulty,
@@ -58,13 +81,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return data.id as string
   },
 
-  createPvpGame: async (playerId) => {
-    const initial = createInitialState()
+  createPvpGame: async (playerId, gameTypeId = 'tictactoe') => {
+    const initial = gameTypeId === 'gomoku' ? createGomokuState() : createTicTacToeState()
 
     const { data, error } = await supabase
       .from('games')
       .insert({
-        game_type_id: 'tictactoe',
+        game_type_id: gameTypeId,
         player_white: playerId,
         player_black: null,
         is_ai_opponent: false,
@@ -98,7 +121,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (error) throw error
 
     const game = data as Game
-    const boardState = game.board_state as unknown as TicTacToeState
+    const boardState = parseBoardState(game)
 
     const { data: opponentData } = await supabase
       .from('profiles')
@@ -119,8 +142,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (error) throw error
 
     const game = data as Game
-    const boardState = game.board_state as unknown as TicTacToeState
-    const result = game.status === 'completed' ? checkResult(boardState) : null
+    const boardState = parseBoardState(game)
+    const result = game.status === 'completed' ? checkAnyResult(game, boardState) : null
 
     set({ game, boardState, result })
   },
@@ -130,8 +153,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!game || !boardState || get().result) return
     if (game.current_turn !== myId) return
 
-    const afterPlayer = applyMove(boardState, index)
-    const playerResult = checkResult(afterPlayer)
+    const isGomoku = game.game_type_id === 'gomoku'
+
+    const afterPlayer = isGomoku
+      ? applyGomokuMove(boardState as GomokuState, index)
+      : applyTicTacToeMove(boardState as TicTacToeState, index)
+
+    const playerResult = isGomoku
+      ? checkGomokuResult(afterPlayer as GomokuState)
+      : checkTicTacToeResult(afterPlayer as TicTacToeState)
+
     const turnNumber = game.turn_number + 1
 
     await supabase.from('moves').insert({
@@ -143,12 +174,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })
 
     if (playerResult !== null) {
-      const winner =
-        playerResult.winner === 'X'
-          ? game.player_white
-          : game.is_ai_opponent
-            ? null
-            : (game.player_black ?? null)
+      const winner = (() => {
+        if (!playerResult.winner) return null
+        if (isGomoku) {
+          // B = player_white (흑), W = player_black (백)
+          return playerResult.winner === 'B' ? game.player_white : (game.player_black ?? null)
+        }
+        // TicTacToe: X = player_white
+        return playerResult.winner === 'X' ? game.player_white : (game.is_ai_opponent ? null : (game.player_black ?? null))
+      })()
 
       await supabase
         .from('games')
@@ -186,9 +220,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       await new Promise((r) => setTimeout(r, 400))
 
-      const aiIndex = getAIMove(afterPlayer, (game.ai_difficulty ?? 'medium') as AIDifficulty)
-      const afterAI = applyMove(afterPlayer, aiIndex)
-      const aiResult = checkResult(afterAI)
+      const difficulty = (game.ai_difficulty ?? 'medium') as AIDifficulty
+      const aiIndex = isGomoku
+        ? getGomokuAIMove(afterPlayer as GomokuState, difficulty)
+        : getTicTacToeAIMove(afterPlayer as TicTacToeState, difficulty)
+
+      const afterAI = isGomoku
+        ? applyGomokuMove(afterPlayer as GomokuState, aiIndex)
+        : applyTicTacToeMove(afterPlayer as TicTacToeState, aiIndex)
+
+      const aiResult = isGomoku
+        ? checkGomokuResult(afterAI as GomokuState)
+        : checkTicTacToeResult(afterAI as TicTacToeState)
+
       const aiTurnNumber = turnNumber + 1
 
       await supabase.from('moves').insert({
@@ -200,14 +244,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       })
 
       if (aiResult !== null) {
-        const winner = aiResult.winner === 'X' ? game.player_white : null
+        // AI is the opponent: AI win = second mark (O for TicTacToe, W for Gomoku)
+        const aiWon = isGomoku
+          ? aiResult.winner === 'W'
+          : aiResult.winner === 'O'
+
         await supabase
           .from('games')
           .update({
             board_state: afterAI,
             turn_number: aiTurnNumber,
             status: 'completed',
-            winner,
+            winner: aiWon ? null : game.player_white,
             win_reason: aiResult.winner ? 'normal' : 'draw',
             completed_at: new Date().toISOString(),
             last_move_at: new Date().toISOString(),
@@ -268,8 +316,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         .single()
       if (!data) return
       const updatedGame = data as Game
-      const boardState = updatedGame.board_state as unknown as TicTacToeState
-      const result = updatedGame.status === 'completed' ? checkResult(boardState) : null
+      const boardState = parseBoardState(updatedGame)
+      const result = updatedGame.status === 'completed' ? checkAnyResult(updatedGame, boardState) : null
       set({ game: updatedGame, boardState, result })
     }
 
