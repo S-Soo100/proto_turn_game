@@ -101,12 +101,8 @@ const Cell = styled.button<CellProps>`
     opacity: 0.35;
   }
 
-  &:active:not(:disabled) {
+  &:active {
     transform: scale(0.9);
-  }
-
-  &:disabled {
-    opacity: 1;
   }
 `
 
@@ -230,7 +226,6 @@ export function GomokuBoard({ state, result, isAIThinking, isMyTurn, isPvp, onCe
                   isWinCell={isWinCell}
                   isLastMove={isLastMove}
                   isDisabled={isDisabled}
-                  disabled={isDisabled}
                   onClick={() => !isDisabled && onCellClick(i)}
                   aria-label={cell ? `${cell} at ${i}` : `Empty ${i}`}
                 >
