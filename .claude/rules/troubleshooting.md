@@ -69,3 +69,16 @@
 ## ERR_QUIC_PROTOCOL_ERROR
 - **원인**: 브라우저의 QUIC(HTTP/3) 프로토콜 오류
 - **해결**: `chrome://flags/#enable-quic` → Disabled
+
+## TypeScript TS6133: 미사용 변수 `winner` (gameStore.ts)
+- **증상**: `pnpm build` 시 `error TS6133: 'winner' is declared but its value is never read`
+- **원인**: 오목 4단계 구현 중 AI 결과 처리 블록에서 `const winner = ...` 선언했으나 실제로는 `aiWon` 기반으로만 업데이트 로직 작성, 변수가 사용되지 않음
+- **해결**: 미사용 `winner` 변수 제거, `aiWon` 기반 코드로 정리
+  ```typescript
+  // 수정 전 (에러)
+  const winner = aiResult.winner === null ? null : game.player_white  // 미사용 변수
+  const aiWon = isGomoku ? aiResult.winner === 'W' : aiResult.winner === 'O'
+
+  // 수정 후
+  const aiWon = isGomoku ? aiResult.winner === 'W' : aiResult.winner === 'O'
+  ```

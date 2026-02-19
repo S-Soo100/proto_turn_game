@@ -3,8 +3,8 @@
 ## 화면 흐름
 ```
 / (홈)
-├── 틱택토 클릭 → 바텀시트
-│     ├── AI 대전 → 난이도 선택 → /game/:gameId (AI)
+├── 틱택토 / 오목 클릭 → 바텀시트 (게임 타입 저장)
+│     ├── AI 대전 → 난이도 선택 → /game/:gameId (AI, game_type_id 포함)
 │     └── 친구와 대전 → /lobby
 │                         ├── 새 게임 만들기 → 대기시트 + 초대URL → /game/:gameId (PvP, waiting)
 │                         └── 대기 중 게임 클릭 → /game/:gameId?join=1 → joinGame() → active
@@ -41,7 +41,7 @@ src/
 │   │   └── ProtectedRoute.tsx
 │   └── game/
 │       ├── TicTacToeBoard.tsx       # props: state, result, isAIThinking, isMyTurn, isPvp, onCellClick
-│       └── GomokuBoard.tsx          # 15x15 바둑판, 흑백돌 렌더링, lastMove 강조
+│       └── GomokuBoard.tsx          # 15x15 바둑판, 🐻(흑B)/🐰(백W) 이모지 돌, lastMove amber/승리 gold outline 강조
 ├── hooks/
 │   └── useAuth.ts
 ├── lib/

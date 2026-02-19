@@ -50,15 +50,16 @@
     - medium: 알파베타 깊이 2 + 30% 랜덤
     - hard: 알파베타 깊이 4
 - **Component**: `src/components/game/GomokuBoard.tsx`
-  - 바둑판 스타일 15x15, 돌 렌더링 (흑/백 원형)
-  - 마지막 수 황색 강조 (`lastMove`), 승리 5칸 금색 링 강조
-  - 호버 시 돌 미리보기
+  - 바둑판 스타일 15x15, 돌 렌더링 (🐻 곰 = 흑(B), 🐰 토끼 = 백(W))
+  - 마지막 수 amber outline 강조 (`lastMove`), 승리 5칸 gold outline 강조
+  - 호버 시 🐻 미리보기, 상태바에 이모지 포함
 - **Store 확장** (`gameStore.ts`):
   - `GameTypeId = 'tictactoe' | 'gomoku'` 타입 추가
   - `startNewGame(playerId, difficulty, gameTypeId?)`, `createPvpGame(playerId, gameTypeId?)` 파라미터 추가
   - `parseBoardState`, `checkAnyResult` 헬퍼로 게임 타입별 분기
 - **GamePage 수정**: `game.game_type_id` 기준 `<GomokuBoard>` vs `<TicTacToeBoard>` 조건부 렌더링
 - **HomePage 수정**: 오목 카드 활성화 (`ACTIVE_GAMES` 배열로 분리), 게임별 바텀시트 타이틀 동적 표시
+- **PvP 마크 표시**: 오목 PvP에서 플레이어 바에 🐻/🐰 이모지로 마크 표시
 
 ## 다음 단계 (미구현)
 - ELO 레이팅 시스템 실제 반영 (게임 종료 시 점수 계산)
