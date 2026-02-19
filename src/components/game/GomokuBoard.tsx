@@ -107,36 +107,33 @@ const Cell = styled.button<CellProps>`
 `
 
 interface StoneProps {
-  mark: 'B' | 'W'
   isWinCell: boolean
   isLastMove: boolean
 }
 
 const Stone = styled(motion.div)<StoneProps>`
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
   position: relative;
   z-index: 1;
-  box-shadow: ${({ mark, isWinCell }) =>
+  outline: ${({ isWinCell, isLastMove }) =>
     isWinCell
-      ? '0 0 0 3px #fbbf24, 0 2px 6px rgba(0,0,0,0.4)'
-      : mark === 'B'
-      ? '1px 2px 4px rgba(0,0,0,0.5), inset -2px -2px 4px rgba(0,0,0,0.3)'
-      : '1px 2px 4px rgba(0,0,0,0.3), inset -2px -2px 4px rgba(255,255,255,0.8)'};
-  background: ${({ mark }) =>
-    mark === 'B'
-      ? 'radial-gradient(circle at 35% 35%, #555, #111)'
-      : 'radial-gradient(circle at 35% 35%, #fff, #ccc)'};
-  outline: ${({ isLastMove }) => (isLastMove ? '2px solid #f59e0b' : 'none')};
+      ? '3px solid #fbbf24'
+      : isLastMove
+      ? '2px solid #f59e0b'
+      : 'none'};
   outline-offset: 1px;
+  border-radius: 50%;
 `
 
 const HoverStone = styled.div`
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #111;
+  font-size: 20px;
+  line-height: 1;
   opacity: 0;
   position: relative;
   z-index: 1;
@@ -195,10 +192,9 @@ function getStatusText(
     if (isPvp) return '게임 종료'
     return result.winner === 'B' ? '승리! 🎉' : '패배... 다시 도전해보세요'
   }
-  if (isPvp) return isMyTurn ? '내 차례 ⚫' : '상대방 차례...'
-  const mark = state.currentMark === 'B' ? '⚫ 흑' : '⚪ 백'
-  if (state.currentMark === 'B') return `당신의 차례 (${mark})`
-  return `AI의 차례 (${mark})`
+  if (isPvp) return isMyTurn ? '내 차례 🐻' : '상대방 차례...'
+  if (state.currentMark === 'B') return '당신의 차례 (🐻 곰)'
+  return 'AI의 차례 (🐰 토끼)'
 }
 
 export function GomokuBoard({ state, result, isAIThinking, isMyTurn, isPvp, onCellClick }: Props) {
@@ -238,15 +234,16 @@ export function GomokuBoard({ state, result, isAIThinking, isMyTurn, isPvp, onCe
                     {cell ? (
                       <Stone
                         key={`stone-${i}`}
-                        mark={cell}
                         isWinCell={isWinCell}
                         isLastMove={isLastMove}
                         initial={{ scale: 0, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                      />
+                      >
+                        {cell === 'B' ? '🐻' : '🐰'}
+                      </Stone>
                     ) : isPlayerTurn ? (
-                      <HoverStone className="stone-hover" />
+                      <HoverStone className="stone-hover">🐻</HoverStone>
                     ) : null}
                   </AnimatePresence>
                 </Cell>

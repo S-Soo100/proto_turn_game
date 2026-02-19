@@ -332,13 +332,13 @@ export function GamePage() {
   const isWaiting = game.status === 'waiting'
   const isGomoku = game.game_type_id === 'gomoku'
 
-  // PvP: determine marks (B/W for Gomoku, X/O for TicTacToe)
+  // PvP: determine marks (emoji for Gomoku, X/O for TicTacToe)
   const myMark = game.player_white === myId
-    ? (isGomoku ? 'B(⚫)' : 'X')
-    : (isGomoku ? 'W(⚪)' : 'O')
+    ? (isGomoku ? '🐻' : 'X')
+    : (isGomoku ? '🐰' : 'O')
   const opponentMark = game.player_white === myId
-    ? (isGomoku ? 'W(⚪)' : 'O')
-    : (isGomoku ? 'B(⚫)' : 'X')
+    ? (isGomoku ? '🐰' : 'O')
+    : (isGomoku ? '🐻' : 'X')
 
   const gameTitle = isGomoku ? '오목' : '틱택토'
 
