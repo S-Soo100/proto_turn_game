@@ -115,7 +115,7 @@ interface StoneProps {
   isLastMove: boolean
 }
 
-const Stone = styled(motion.div)<StoneProps>`
+const Stone = styled.div<StoneProps>`
   width: 24px;
   height: 24px;
   display: flex;
@@ -236,12 +236,8 @@ export function GomokuBoard({ state, result, isAIThinking, isMyTurn, isPvp, onCe
                 >
                   {cell ? (
                     <Stone
-                      key={`stone-${i}`}
                       isWinCell={isWinCell}
                       isLastMove={isLastMove}
-                      initial={{ scale: 0, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ type: 'spring', stiffness: 500, damping: 25 }}
                     >
                       {cell === 'B' ? '🐻' : '🐰'}
                     </Stone>
