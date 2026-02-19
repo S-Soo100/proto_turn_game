@@ -1,5 +1,5 @@
 import styled from '@emotion/styled'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import type { GomokuState, GomokuResult } from '@/lib/game-logic/gomoku'
 
 interface Props {
@@ -234,22 +234,20 @@ export function GomokuBoard({ state, result, isAIThinking, isMyTurn, isPvp, onCe
                   onClick={() => !isDisabled && onCellClick(i)}
                   aria-label={cell ? `${cell} at ${i}` : `Empty ${i}`}
                 >
-                  <AnimatePresence>
-                    {cell ? (
-                      <Stone
-                        key={`stone-${i}`}
-                        isWinCell={isWinCell}
-                        isLastMove={isLastMove}
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                      >
-                        {cell === 'B' ? '🐻' : '🐰'}
-                      </Stone>
-                    ) : isPlayerTurn ? (
-                      <HoverStone className="stone-hover">🐻</HoverStone>
-                    ) : null}
-                  </AnimatePresence>
+                  {cell ? (
+                    <Stone
+                      key={`stone-${i}`}
+                      isWinCell={isWinCell}
+                      isLastMove={isLastMove}
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                    >
+                      {cell === 'B' ? '🐻' : '🐰'}
+                    </Stone>
+                  ) : isPlayerTurn ? (
+                    <HoverStone className="stone-hover">🐻</HoverStone>
+                  ) : null}
                 </Cell>
               )
             })}
