@@ -5,6 +5,7 @@ import {
   generateSchedule,
   createInitialGameState,
   applyClick,
+  applyDecoyClick,
   applyMiss,
   getAccuracy,
   GAME_DURATION_MS,
@@ -18,11 +19,12 @@ import TargetCircle from './TargetCircle'
 
 interface Props {
   onGameEnd: (state: GameState) => void
+  onQuit: () => void
 }
 
-type GamePhase = 'ready' | 'playing' | 'finished'
+type GamePhase = 'ready' | 'playing' | 'paused' | 'finished'
 
-export default function ReactionSpeedBoard({ onGameEnd }: Props) {
+export default function ReactionSpeedBoard({ onGameEnd, onQuit }: Props) {
   const [phase, setPhase] = useState<GamePhase>('ready')
   const [elapsedMs, setElapsedMs] = useState(0)
   const [gameState, setGameState] = useState<GameState>(createInitialGameState())
@@ -32,6 +34,7 @@ export default function ReactionSpeedBoard({ onGameEnd }: Props) {
 
   const startTimeRef = useRef(0)
   const rafRef = useRef(0)
+  const pausedAtRef = useRef(0)
   const gameStateRef = useRef(gameState)
   gameStateRef.current = gameState
 
@@ -44,6 +47,19 @@ export default function ReactionSpeedBoard({ onGameEnd }: Props) {
     setFeedbackTargetIds(new Set())
     setElapsedMs(0)
     startTimeRef.current = performance.now()
+    setPhase('playing')
+  }, [])
+
+  // Pause / Resume
+  const handlePause = useCallback(() => {
+    pausedAtRef.current = performance.now()
+    cancelAnimationFrame(rafRef.current)
+    setPhase('paused')
+  }, [])
+
+  const handleResume = useCallback(() => {
+    const pausedDuration = performance.now() - pausedAtRef.current
+    startTimeRef.current += pausedDuration
     setPhase('playing')
   }, [])
 
@@ -85,7 +101,7 @@ export default function ReactionSpeedBoard({ onGameEnd }: Props) {
     setActiveTargetIds(newActive)
   }, [elapsedMs, schedule, phase])
 
-  // Handle hit
+  // Handle hit (normal / speed)
   const handleHit = useCallback((targetId: number, clickTimeMs: number): { grade: Grade; score: number } | null => {
     const target = schedule.find(t => t.id === targetId)
     if (!target) return null
@@ -104,6 +120,13 @@ export default function ReactionSpeedBoard({ onGameEnd }: Props) {
     return { grade: result.grade, score: result.score }
   }, [schedule, feedbackTargetIds])
 
+  // Handle decoy hit
+  const handleDecoyHit = useCallback((targetId: number) => {
+    if (feedbackTargetIds.has(targetId)) return
+    setFeedbackTargetIds(prev => new Set(prev).add(targetId))
+    setGameState(prev => applyDecoyClick(prev))
+  }, [feedbackTargetIds])
+
   // Handle miss
   const handleMiss = useCallback((targetId: number) => {
     if (feedbackTargetIds.has(targetId)) return
@@ -116,6 +139,7 @@ export default function ReactionSpeedBoard({ onGameEnd }: Props) {
   const seconds = Math.floor(remainingSec % 60)
   const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
   const accuracy = getAccuracy(gameState)
+  const isActive = phase === 'playing'
 
   if (phase === 'ready') {
     return (
@@ -123,6 +147,9 @@ export default function ReactionSpeedBoard({ onGameEnd }: Props) {
         <ReadyScreen>
           <ReadyTitle>Reaction Speed</ReadyTitle>
           <ReadyDesc>120초 동안 타겟 서클을 클릭하여 최고 점수를 달성하세요!</ReadyDesc>
+          <ReadyDesc style={{ fontSize: 13, color: '#9ca3af' }}>
+            🔵 일반 · 🚨 스피드(고득점) · 💚 아군(누르면 감점!)
+          </ReadyDesc>
           <StartButton onClick={startGame}>시작</StartButton>
         </ReadyScreen>
       </Wrapper>
@@ -133,9 +160,12 @@ export default function ReactionSpeedBoard({ onGameEnd }: Props) {
     <Wrapper>
       {/* HUD */}
       <HUD>
-        <TimerText>{timeStr}</TimerText>
+        <TimerRow>
+          <TimerText>{timeStr}</TimerText>
+          <PauseButton onClick={handlePause}>⏸</PauseButton>
+        </TimerRow>
         <TimerBar>
-          <TimerFill $playing={phase === 'playing'} />
+          <TimerFill $active={isActive} />
         </TimerBar>
       </HUD>
 
@@ -148,7 +178,9 @@ export default function ReactionSpeedBoard({ onGameEnd }: Props) {
               key={t.id}
               target={t}
               gameElapsedMs={elapsedMs}
+              paused={phase === 'paused'}
               onHit={handleHit}
+              onDecoyHit={handleDecoyHit}
               onMiss={handleMiss}
             />
           ))
@@ -166,6 +198,19 @@ export default function ReactionSpeedBoard({ onGameEnd }: Props) {
         </ComboDisplay>
         <AccuracyDisplay>{Math.round(accuracy * 100)}%</AccuracyDisplay>
       </StatusBar>
+
+      {/* Pause Overlay */}
+      {phase === 'paused' && (
+        <PauseOverlay>
+          <PauseCard>
+            <PauseTitle>일시정지</PauseTitle>
+            <PauseButtons>
+              <ResumeButton onClick={handleResume}>계속하기</ResumeButton>
+              <QuitButton onClick={onQuit}>종료하기</QuitButton>
+            </PauseButtons>
+          </PauseCard>
+        </PauseOverlay>
+      )}
     </Wrapper>
   )
 }
@@ -180,6 +225,7 @@ const Wrapper = styled.div`
   margin: 0 auto;
   height: 100%;
   min-height: 0;
+  position: relative;
 `
 
 const HUD = styled.div`
@@ -190,12 +236,35 @@ const HUD = styled.div`
   flex-shrink: 0;
 `
 
+const TimerRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+`
+
 const TimerText = styled.div`
   font-size: 28px;
   font-weight: 700;
   text-align: center;
   color: #1f2937;
   font-variant-numeric: tabular-nums;
+`
+
+const PauseButton = styled.button`
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 18px;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: #6b7280;
+  line-height: 1;
+  &:active { background: #f3f4f6; }
 `
 
 const TimerBar = styled.div`
@@ -211,13 +280,13 @@ const timerDrain = keyframes`
   to   { width: 0%; }
 `
 
-const TimerFill = styled.div<{ $playing: boolean }>`
+const TimerFill = styled.div<{ $active: boolean }>`
   height: 100%;
   background: linear-gradient(90deg, #ef4444, #f59e0b, #22c55e);
   border-radius: 3px;
   width: 100%;
   animation: ${timerDrain} ${GAME_DURATION_MS}ms linear forwards;
-  animation-play-state: ${p => (p.$playing ? 'running' : 'paused')};
+  animation-play-state: ${p => (p.$active ? 'running' : 'paused')};
 `
 
 const GameArea = styled.div`
@@ -281,6 +350,7 @@ const ReadyDesc = styled.p`
   color: #6b7280;
   text-align: center;
   line-height: 1.5;
+  margin: 0;
 `
 
 const StartButton = styled.button`
@@ -296,4 +366,65 @@ const StartButton = styled.button`
   transition: background 0.2s;
   &:hover { background: #2563eb; }
   &:active { background: #1d4ed8; }
+`
+
+// ── Pause Overlay ──
+
+const PauseOverlay = styled.div`
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  border-radius: 8px;
+`
+
+const PauseCard = styled.div`
+  background: #fff;
+  border-radius: 16px;
+  padding: 28px 24px;
+  width: 80%;
+  max-width: 280px;
+  text-align: center;
+`
+
+const PauseTitle = styled.h2`
+  font-size: 22px;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 20px;
+`
+
+const PauseButtons = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+`
+
+const ResumeButton = styled.button`
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: #3b82f6;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  &:active { background: #2563eb; }
+`
+
+const QuitButton = styled.button`
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #ef4444;
+  background: #fef2f2;
+  border: 1.5px solid #fecaca;
+  border-radius: 12px;
+  cursor: pointer;
+  &:active { background: #fee2e2; }
 `

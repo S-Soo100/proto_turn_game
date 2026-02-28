@@ -130,12 +130,20 @@ export function ReactionSpeedPage() {
     )
   }
 
+  // Quit (no save)
+  const handleQuit = () => {
+    setFinalState(null)
+    setSaved(false)
+    setNewRecord(false)
+    setPhase('lobby')
+  }
+
   // ── Playing ──
   if (phase === 'playing') {
     return (
       <Page>
         <GameWrapper>
-          <ReactionSpeedBoard onGameEnd={handleGameEnd} />
+          <ReactionSpeedBoard onGameEnd={handleGameEnd} onQuit={handleQuit} />
         </GameWrapper>
       </Page>
     )
@@ -182,6 +190,12 @@ export function ReactionSpeedPage() {
                   <StatLabel>최대 콤보</StatLabel>
                 </StatItem>
               </StatGrid>
+
+              {finalState.decoyClicks > 0 && (
+                <DecoyPenaltyRow>
+                  감점 클릭: <strong>{finalState.decoyClicks}회</strong> (-{finalState.decoyClicks * 50}점)
+                </DecoyPenaltyRow>
+              )}
 
               <GradeBar>
                 {(['perfect', 'great', 'good', 'ok'] as const).map(g => (
@@ -464,6 +478,13 @@ const GRADE_COLORS: Record<string, string> = {
   good: '#3b82f6',
   ok: '#9ca3af',
 }
+
+const DecoyPenaltyRow = styled.div`
+  font-size: 13px;
+  color: #ef4444;
+  text-align: center;
+  margin-bottom: 12px;
+`
 
 const GradeBar = styled.div`
   display: grid;

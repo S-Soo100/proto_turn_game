@@ -1,13 +1,13 @@
 // ── Types ──
 
-export type TargetType = 'normal' | 'speed'
+export type TargetType = 'normal' | 'speed' | 'decoy'
 export type Grade = 'perfect' | 'great' | 'good' | 'ok'
 
 export interface TargetScheduleItem {
   id: number
   type: TargetType
   spawnTime: number   // ms from game start (0~120000)
-  duration: number    // ms — normal=4000, speed=2000
+  duration: number    // ms — normal=4000, speed=2000, decoy=3000
   x: number           // 0~100 (% of game area width)
   y: number           // 0~100 (% of game area height)
 }
@@ -18,6 +18,7 @@ export interface GameState {
   maxCombo: number
   clicks: number
   misses: number
+  decoyClicks: number
   grades: Record<Grade, number>
 }
 
@@ -33,10 +34,13 @@ export interface ClickResult {
 
 export const GAME_DURATION_MS = 120_000
 export const TOTAL_TARGETS = 100
-export const NORMAL_COUNT = 70
+export const NORMAL_COUNT = 55
 export const SPEED_COUNT = 30
+export const DECOY_COUNT = 15
 export const NORMAL_DURATION_MS = 4_000
 export const SPEED_DURATION_MS = 2_000
+export const DECOY_DURATION_MS = 3_000
+export const DECOY_PENALTY = 50
 
 const NORMAL_SCORE_MIN = 10
 const NORMAL_SCORE_MAX = 100
@@ -72,13 +76,20 @@ function mulberry32(seed: number): () => number {
 
 // ── Schedule Generation ──
 
+function getTargetDuration(type: TargetType): number {
+  if (type === 'speed') return SPEED_DURATION_MS
+  if (type === 'decoy') return DECOY_DURATION_MS
+  return NORMAL_DURATION_MS
+}
+
 export function generateSchedule(seed?: number): TargetScheduleItem[] {
   const rng = mulberry32(seed ?? Date.now())
 
-  // Build type list: 70 normal + 30 speed, then shuffle
+  // Build type list: 55 normal + 30 speed + 15 decoy, then shuffle
   const types: TargetType[] = [
     ...Array<TargetType>(NORMAL_COUNT).fill('normal'),
     ...Array<TargetType>(SPEED_COUNT).fill('speed'),
+    ...Array<TargetType>(DECOY_COUNT).fill('decoy'),
   ]
   // Fisher-Yates shuffle
   for (let i = types.length - 1; i > 0; i--) {
@@ -104,7 +115,7 @@ export function generateSchedule(seed?: number): TargetScheduleItem[] {
   // Ensure last targets have time to fully play out
   // Cap latest spawn so duration fits within game
   const schedule: TargetScheduleItem[] = types.map((type, i) => {
-    const duration = type === 'normal' ? NORMAL_DURATION_MS : SPEED_DURATION_MS
+    const duration = getTargetDuration(type)
     const maxSpawn = GAME_DURATION_MS - duration
     const spawnTime = Math.min(spawnTimes[i], maxSpawn)
 
@@ -177,18 +188,13 @@ export function createInitialGameState(): GameState {
     maxCombo: 0,
     clicks: 0,
     misses: 0,
+    decoyClicks: 0,
     grades: { perfect: 0, great: 0, good: 0, ok: 0 },
   }
 }
 
 /**
  * Process a successful click on a target.
- * @param state - current game state
- * @param targetType - type of target clicked
- * @param clickTimeMs - game elapsed time when clicked (ms)
- * @param spawnTimeMs - when the target appeared (ms)
- * @param durationMs - target's total lifetime (ms)
- * @returns updated state and click result details
  */
 export function applyClick(
   state: GameState,
@@ -211,12 +217,25 @@ export function applyClick(
     maxCombo: Math.max(state.maxCombo, newCombo),
     clicks: state.clicks + 1,
     misses: state.misses,
+    decoyClicks: state.decoyClicks,
     grades: { ...state.grades, [grade]: state.grades[grade] + 1 },
   }
 
   return {
     state: newState,
     result: { score, baseScore, grade, combo: newCombo, comboMultiplier },
+  }
+}
+
+/**
+ * Process a click on a decoy target (penalty).
+ */
+export function applyDecoyClick(state: GameState): GameState {
+  return {
+    ...state,
+    score: Math.max(0, state.score - DECOY_PENALTY),
+    combo: 0,
+    decoyClicks: state.decoyClicks + 1,
   }
 }
 

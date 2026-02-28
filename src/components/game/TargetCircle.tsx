@@ -3,11 +3,14 @@ import styled from '@emotion/styled'
 import { keyframes } from '@emotion/react'
 import { motion } from 'framer-motion'
 import type { TargetScheduleItem, Grade } from '@/lib/game-logic/reaction-speed'
+import { DECOY_PENALTY } from '@/lib/game-logic/reaction-speed'
 
 interface Props {
   target: TargetScheduleItem
   gameElapsedMs: number
+  paused: boolean
   onHit: (targetId: number, clickTimeMs: number) => { grade: Grade; score: number } | null
+  onDecoyHit: (targetId: number) => void
   onMiss: (targetId: number) => void
 }
 
@@ -30,8 +33,16 @@ const INNER_SIZE = 32
 // Outer circle starts at this size and shrinks to INNER_SIZE
 const OUTER_START_SIZE = 64
 
-export default function TargetCircle({ target, gameElapsedMs, onHit, onMiss }: Props) {
+// Colors per target type
+const TYPE_COLORS: Record<string, { border: string; bg: string }> = {
+  normal: { border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.15)' },
+  speed:  { border: '#ef4444', bg: 'rgba(239, 68, 68, 0.15)' },
+  decoy:  { border: '#22c55e', bg: 'rgba(34, 197, 94, 0.15)' },
+}
+
+export default function TargetCircle({ target, gameElapsedMs, paused, onHit, onDecoyHit, onMiss }: Props) {
   const [hit, setHit] = useState<{ grade: Grade; score: number } | null>(null)
+  const [decoyHit, setDecoyHit] = useState(false)
   const [missed, setMissed] = useState(false)
   const missedRef = useRef(false)
   const hitRef = useRef(false)
@@ -39,29 +50,39 @@ export default function TargetCircle({ target, gameElapsedMs, onHit, onMiss }: P
   const elapsed = gameElapsedMs - target.spawnTime
   const expired = elapsed >= target.duration
 
-  // Handle expiry (miss)
+  // Handle expiry (miss) — decoy expiry is silent (not counted as miss)
   useEffect(() => {
     if (expired && !hitRef.current && !missedRef.current) {
       missedRef.current = true
-      setMissed(true)
-      onMiss(target.id)
+      if (target.type === 'decoy') {
+        // Decoy expired without click — no penalty, just disappear
+        setMissed(true)
+      } else {
+        setMissed(true)
+        onMiss(target.id)
+      }
     }
-  }, [expired, target.id, onMiss])
+  }, [expired, target.id, target.type, onMiss])
 
   const handleClick = () => {
     if (hitRef.current || missedRef.current || expired) return
     hitRef.current = true
+
+    if (target.type === 'decoy') {
+      setDecoyHit(true)
+      onDecoyHit(target.id)
+      return
+    }
+
     const result = onHit(target.id, gameElapsedMs)
     if (result) {
       setHit(result)
     }
   }
 
-  const isNormal = target.type === 'normal'
-  const baseColor = isNormal ? '#3b82f6' : '#ef4444'
-  const bgColor = isNormal ? 'rgba(59, 130, 246, 0.15)' : 'rgba(239, 68, 68, 0.15)'
+  const colors = TYPE_COLORS[target.type] ?? TYPE_COLORS.normal
 
-  // Already hit or missed — show feedback then unmount
+  // Already hit — show feedback then unmount
   if (hit) {
     return (
       <FeedbackContainer style={{ left: `${target.x}%`, top: `${target.y}%` }}>
@@ -85,7 +106,32 @@ export default function TargetCircle({ target, gameElapsedMs, onHit, onMiss }: P
     )
   }
 
+  // Decoy clicked — penalty feedback
+  if (decoyHit) {
+    return (
+      <FeedbackContainer style={{ left: `${target.x}%`, top: `${target.y}%` }}>
+        <motion.div
+          initial={{ opacity: 1, scale: 1, x: 0 }}
+          animate={{ opacity: 0, scale: 1.2, x: [0, -8, 8, -6, 6, 0] }}
+          transition={{ duration: 0.7 }}
+          style={{
+            color: '#ef4444',
+            fontSize: 18,
+            fontWeight: 800,
+            textAlign: 'center',
+            whiteSpace: 'nowrap',
+            textShadow: '0 1px 4px rgba(0,0,0,0.2)',
+          }}
+        >
+          -{DECOY_PENALTY}
+        </motion.div>
+      </FeedbackContainer>
+    )
+  }
+
+  // Missed — silent for decoy, "MISS" for others
   if (missed) {
+    if (target.type === 'decoy') return null
     return (
       <FeedbackContainer style={{ left: `${target.x}%`, top: `${target.y}%` }}>
         <motion.div
@@ -111,11 +157,12 @@ export default function TargetCircle({ target, gameElapsedMs, onHit, onMiss }: P
       style={{ left: `${target.x}%`, top: `${target.y}%` }}
       onClick={handleClick}
     >
-      {/* Outer shrinking ring — CSS animation, no React re-render needed */}
+      {/* Outer shrinking ring — CSS animation */}
       <OuterRing
         style={{
           animationDuration: `${target.duration}ms`,
-          borderColor: baseColor,
+          borderColor: colors.border,
+          animationPlayState: paused ? 'paused' : 'running',
         }}
       />
       {/* Inner target circle */}
@@ -123,11 +170,12 @@ export default function TargetCircle({ target, gameElapsedMs, onHit, onMiss }: P
         style={{
           width: INNER_SIZE,
           height: INNER_SIZE,
-          backgroundColor: bgColor,
-          borderColor: baseColor,
+          backgroundColor: colors.bg,
+          borderColor: colors.border,
         }}
       >
-        {target.type === 'speed' && <SpeedLabel>S</SpeedLabel>}
+        {target.type === 'speed' && <TypeLabel>🚨</TypeLabel>}
+        {target.type === 'decoy' && <TypeLabel>💚</TypeLabel>}
       </InnerCircle>
     </Container>
   )
@@ -172,12 +220,11 @@ const InnerCircle = styled.div`
   z-index: 11;
 `
 
-const SpeedLabel = styled.span`
+const TypeLabel = styled.span`
   font-size: 14px;
-  font-weight: 800;
-  color: #ef4444;
   user-select: none;
   pointer-events: none;
+  line-height: 1;
 `
 
 const FeedbackContainer = styled.div`
@@ -186,7 +233,6 @@ const FeedbackContainer = styled.div`
   pointer-events: none;
   z-index: 20;
 `
-
 
 const ScorePopup = styled.div`
   font-size: 14px;
