@@ -6,6 +6,7 @@ import { SignupPage } from '@/pages/SignupPage'
 import { HomePage } from '@/pages/HomePage'
 import { LobbyPage } from '@/pages/LobbyPage'
 import { GamePage } from '@/pages/GamePage'
+import { ReactionSpeedPage } from '@/pages/ReactionSpeedPage'
 
 function AppRoutes() {
   useAuth() // Initialize auth state listener
@@ -27,6 +28,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LobbyPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reaction-speed"
+        element={
+          <ProtectedRoute>
+            <ReactionSpeedPage />
           </ProtectedRoute>
         }
       />
