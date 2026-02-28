@@ -8,6 +8,10 @@
 │     └── 친구와 대전 → /lobby
 │                         ├── 새 게임 만들기 → 대기시트 + 초대URL → /game/:gameId (PvP, waiting)
 │                         └── 대기 중 게임 클릭 → /game/:gameId?join=1 → joinGame() → active
+├── 반응속도 게임 클릭 → /reaction-speed (솔로 게임, 바텀시트 없음)
+│     ├── 로비 (Top 10 랭킹 + 시작 버튼)
+│     ├── 플레이 (120초 타겟 클릭)
+│     └── 결과 (통계 + 저장 + 다시하기)
 /login  /signup
 ```
 
@@ -31,7 +35,7 @@ Supabase postgres_changes Realtime은 테이블에 **Replica Identity** 설정�
 ## 파일 구조
 ```
 src/
-├── App.tsx                          # BrowserRouter + Routes (/, /login, /signup, /lobby, /game/:gameId)
+├── App.tsx                          # BrowserRouter + Routes (/, /login, /signup, /lobby, /game/:gameId, /reaction-speed)
 ├── main.tsx
 ├── index.css
 ├── components/
@@ -41,20 +45,25 @@ src/
 │   │   └── ProtectedRoute.tsx
 │   └── game/
 │       ├── TicTacToeBoard.tsx       # props: state, result, isAIThinking, isMyTurn, isPvp, onCellClick
-│       └── GomokuBoard.tsx          # 15x15 바둑판, 🐻(흑B)/🐰(백W) 이모지 돌, lastMove amber/승리 gold outline 강조
+│       ├── GomokuBoard.tsx          # 15x15 바둑판, 🐻(흑B)/🐰(백W) 이모지 돌, lastMove amber/승리 gold outline 강조
+│       ├── ReactionSpeedBoard.tsx   # 반응속도 게임 보드: HUD(타이머) + GameArea(타겟) + StatusBar(점수/콤보)
+│       └── TargetCircle.tsx         # osu! 스타일 축소 원 타겟 (CSS @keyframes 애니메이션)
 ├── hooks/
 │   └── useAuth.ts
 ├── lib/
 │   ├── supabase.ts
+│   ├── leaderboard.ts               # 솔로 게임 랭킹: fetchTopScores, fetchMyBest, saveScore
 │   └── game-logic/
 │       ├── tictactoe.ts             # 순수 게임 로직 + 미니맥스 AI
-│       └── gomoku.ts                # GomokuState/Result + 알파베타 AI (깊이 2/4)
+│       ├── gomoku.ts                # GomokuState/Result + 알파베타 AI (깊이 2/4)
+│       └── reaction-speed.ts        # 타겟 스케줄 생성 + 점수/콤보/등급 계산 (seeded RNG)
 ├── pages/
 │   ├── LoginPage.tsx
 │   ├── SignupPage.tsx
-│   ├── HomePage.tsx                 # 게임 카드(틱택토/오목) → 모드/난이도 바텀시트
+│   ├── HomePage.tsx                 # 게임 카드(틱택토/오목/반응속도) → 모드/난이도 바텀시트, SOLO_GAMES 배열
 │   ├── LobbyPage.tsx                # PvP 로비: 대기방 목록(Realtime+폴링) + 새 게임 + 초대링크
-│   └── GamePage.tsx                 # game.game_type_id 기준 보드 조건부 렌더링
+│   ├── GamePage.tsx                 # game.game_type_id 기준 보드 조건부 렌더링
+│   └── ReactionSpeedPage.tsx        # 반응속도 게임 페이지: lobby/playing/result 3단계 흐름
 ├── store/
 │   ├── authStore.ts
 │   └── gameStore.ts                 # GameTypeId 타입, startNewGame/createPvpGame에 gameTypeId 파라미터
@@ -66,7 +75,8 @@ supabase/migrations/
 ├── 20260218081913_add_game_types.sql   # game_types, games, moves
 └── 20260218090000_pvp_support.sql      # PvP: CONSTRAINT 수정, RLS 추가 (SQL Editor에서 수동 실행)
 
-# gomoku game_types 행은 SQL Editor에서 수동 INSERT (마이그레이션 파일 없음)
+# gomoku, reaction-speed-game game_types 행은 SQL Editor에서 수동 INSERT (마이그레이션 파일 없음)
+# leaderboard 테이블도 SQL Editor에서 수동 생성 (솔로 게임 랭킹용)
 
 .claude/
 ├── settings.local.json
@@ -87,6 +97,11 @@ planning/
 │   └── usecases/
 ├── tictactoe/             # 틱택토 (overview + 에픽/티켓/유즈케이스)
 ├── gomoku/                # 오목
+├── reaction-speed-game/   # 반응속도 게임 (에픽: E-RSG001 MVP)
+│   ├── overview.md
+│   ├── epics/
+│   ├── tickets/           # T-RSG001~T-RSG007
+│   └── usecases/
 ├── block-puzzle/          # 블록 퍼즐 (에픽: E-BP001 MVP)
 │   ├── overview.md
 │   ├── research/          # 리서치 문서 (타입 분석, 트렌드)
