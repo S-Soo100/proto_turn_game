@@ -47,7 +47,7 @@ export async function fetchMyBest(
     .eq('player_id', playerId)
     .order('score', { ascending: false })
     .limit(1)
-    .single()
+    .maybeSingle()
 
   if (error) return null
   return data as LeaderboardEntry

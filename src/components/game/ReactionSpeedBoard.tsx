@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import styled from '@emotion/styled'
+import { keyframes } from '@emotion/react'
 import {
   generateSchedule,
   createInitialGameState,
@@ -114,7 +115,6 @@ export default function ReactionSpeedBoard({ onGameEnd }: Props) {
   const minutes = Math.floor(remainingSec / 60)
   const seconds = Math.floor(remainingSec % 60)
   const timeStr = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-  const progressPct = ((GAME_DURATION_MS - elapsedMs) / GAME_DURATION_MS) * 100
   const accuracy = getAccuracy(gameState)
 
   if (phase === 'ready') {
@@ -135,7 +135,7 @@ export default function ReactionSpeedBoard({ onGameEnd }: Props) {
       <HUD>
         <TimerText>{timeStr}</TimerText>
         <TimerBar>
-          <TimerFill style={{ width: `${progressPct}%` }} />
+          <TimerFill $playing={phase === 'playing'} />
         </TimerBar>
       </HUD>
 
@@ -176,6 +176,8 @@ const Wrapper = styled.div`
   display: flex;
   flex-direction: column;
   width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
   height: 100%;
   min-height: 0;
 `
@@ -204,11 +206,18 @@ const TimerBar = styled.div`
   overflow: hidden;
 `
 
-const TimerFill = styled.div`
+const timerDrain = keyframes`
+  from { width: 100%; }
+  to   { width: 0%; }
+`
+
+const TimerFill = styled.div<{ $playing: boolean }>`
   height: 100%;
   background: linear-gradient(90deg, #ef4444, #f59e0b, #22c55e);
   border-radius: 3px;
-  transition: width 100ms linear;
+  width: 100%;
+  animation: ${timerDrain} ${GAME_DURATION_MS}ms linear forwards;
+  animation-play-state: ${p => (p.$playing ? 'running' : 'paused')};
 `
 
 const GameArea = styled.div`
