@@ -34,6 +34,11 @@ planning/
 │   ├── epics/
 │   ├── tickets/
 │   └── usecases/
+├── reaction-speed-game/          # 반응속도 게임
+│   ├── overview.md
+│   ├── epics/
+│   ├── tickets/
+│   └── usecases/
 └── archive/                     # 기존 문서 보관
 ```
 
@@ -45,6 +50,7 @@ planning/
 | `TT` | Tic-Tac-Toe (틱택토) | `planning/tictactoe/` |
 | `GM` | Gomoku (오목) | `planning/gomoku/` |
 | `BP` | Block Puzzle (블록 퍼즐) | `planning/block-puzzle/` |
+| `RSG` | Reaction Speed Game (반응속도 게임) | `planning/reaction-speed-game/` |
 
 새 게임 추가 시 스코프 코드를 이 테이블에 등록한다.
 

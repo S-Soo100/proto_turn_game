@@ -82,3 +82,46 @@
   // 수정 후
   const aiWon = isGomoku ? aiResult.winner === 'W' : aiResult.winner === 'O'
   ```
+
+## 반응속도 게임: Emotion `as={motion.div}` 타입 에러
+- **증상**: `Property 'initial' does not exist on type` — Emotion styled 컴포넌트에 `as={motion.div}` 사용 시
+- **원인**: Emotion의 `as` prop과 Framer Motion의 props가 타입 수준에서 호환되지 않음
+- **해결**: `styled(motion.div)` 패턴 사용
+  ```typescript
+  // 에러: const Box = styled.div`...`; <Box as={motion.div} initial={...}>
+  // 수정: const Box = styled(motion.div)`...`; <Box initial={...}>
+  ```
+
+## 반응속도 게임: CSS 애니메이션 미작동 (타겟 축소 + 타이머 바)
+- **증상**: 외부 링이 줄어들지 않음, 타이머 바가 부드럽게 감소하지 않음
+- **원인**: JS state(`elapsedMs`)를 매 RAF 프레임마다 `setElapsedMs()`로 갱신하지만, React 19 자동 배칭으로 실제 리렌더링 빈도가 부족
+- **해결**: JS 계산 기반 inline style → CSS `@keyframes` 애니메이션으로 전환 (GPU 기반, 리렌더링 무관)
+  ```typescript
+  // 타겟 축소: TargetCircle.tsx
+  const shrinkRing = keyframes`
+    from { width: 64px; height: 64px; }
+    to   { width: 32px; height: 32px; }
+  `
+  // animation-duration은 target.duration을 inline style로 전달
+
+  // 타이머 바: ReactionSpeedBoard.tsx
+  const timerDrain = keyframes`
+    from { width: 100%; }
+    to   { width: 0%; }
+  `
+  // animation-duration: GAME_DURATION_MS (120초)
+  ```
+
+## 반응속도 게임: Leaderboard 406 에러
+- **증상**: `fetchMyBest` 호출 시 `406 (Not Acceptable)` 반복 발생
+- **원인**: Supabase `.single()`은 정확히 1행을 기대 — 기록이 없는 플레이어에게 0행 반환 시 에러
+- **해결**: `.single()` → `.maybeSingle()` — 0행이면 `null` 반환, 에러 없음
+
+## 반응속도 게임: game_types INSERT 시 NOT NULL 위반
+- **증상**: `null value in column "board_config" of relation "game_types" violates not-null constraint`
+- **원인**: `game_types` 테이블의 `board_config`과 `initial_board_state`가 `JSONB NOT NULL` — 반응속도 게임은 보드가 없지만 값 필요
+- **해결**: 빈 JSON 객체 `'{}'`로 채워서 INSERT
+  ```sql
+  INSERT INTO game_types (id, name, description, board_config, initial_board_state)
+  VALUES ('reaction-speed-game', '...', '...', '{}', '{}');
+  ```

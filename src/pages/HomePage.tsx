@@ -308,6 +308,10 @@ const ACTIVE_GAMES: { gameTypeId: GameTypeId; emoji: string; name: string; desc:
   { gameTypeId: 'gomoku', emoji: '⚫', name: '오목', desc: '15x15 보드에서 5개 연속으로 이기세요' },
 ]
 
+const SOLO_GAMES: { path: string; emoji: string; name: string; desc: string }[] = [
+  { path: '/reaction-speed', emoji: '🎯', name: '반응속도 게임', desc: '120초 동안 타겟 서클을 클릭하여 최고 점수 달성' },
+]
+
 const FUTURE_GAMES = [
   { emoji: '♟️', name: '체스', desc: '클래식 2인 전략 게임' },
 ]
@@ -378,6 +382,17 @@ export function HomePage() {
 
         {ACTIVE_GAMES.map((g) => (
           <GameCard key={g.gameTypeId} onClick={() => handleOpenSheet(g.gameTypeId)}>
+            <GameEmoji>{g.emoji}</GameEmoji>
+            <GameInfo>
+              <GameName>{g.name}</GameName>
+              <GameDesc>{g.desc}</GameDesc>
+            </GameInfo>
+            <PlayIcon>▶</PlayIcon>
+          </GameCard>
+        ))}
+
+        {SOLO_GAMES.map((g) => (
+          <GameCard key={g.path} onClick={() => navigate(g.path)}>
             <GameEmoji>{g.emoji}</GameEmoji>
             <GameInfo>
               <GameName>{g.name}</GameName>

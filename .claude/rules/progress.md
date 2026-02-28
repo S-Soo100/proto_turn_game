@@ -78,6 +78,22 @@
   - `E-BP001` 블록 퍼즐 MVP (T-BP001, T-BP002, T-BP003)
 - **기존 규칙 업데이트**: CLAUDE.md 인덱스에 workflow.md 추가, update-guide.md에 티켓 규칙 추가
 
+### 6단계: 반응속도 게임 (솔로) ✅
+- **DB**: `game_types`에 `reaction-speed-game` 행 추가, `leaderboard` 테이블 생성
+  - **⚠️ Supabase SQL Editor에서 수동 실행 완료**
+- **Game Logic**: `src/lib/game-logic/reaction-speed.ts`
+  - seeded RNG로 100개 타겟 스케줄 생성 (Normal 70 + Speed 30)
+  - 시간 비례 점수 계산, 콤보 배율 (x2/x3/x4/x5), 등급 (Perfect/Great/Good/OK)
+- **Components**:
+  - `TargetCircle.tsx` — osu! 스타일 축소 원 (CSS `@keyframes` 애니메이션)
+  - `ReactionSpeedBoard.tsx` — HUD(타이머 CSS 애니메이션) + GameArea + StatusBar
+- **Leaderboard**: `src/lib/leaderboard.ts` — fetchTopScores, fetchMyBest, saveScore
+- **Page**: `src/pages/ReactionSpeedPage.tsx` — lobby(랭킹)/playing/result 3단계 흐름
+- **HomePage 수정**: `SOLO_GAMES` 배열로 반응속도 게임 카드 추가 (바텀시트 없이 직접 이동)
+- **라우트**: `/reaction-speed` 추가
+- **QA 수정 (T-RSG006)**: 원 크기 축소 (Inner 32px, Outer 64px), CSS 축소 애니메이션 전환, 모바일 세로 레이아웃 최적화
+- **QA 수정 (T-RSG007)**: leaderboard `.maybeSingle()` 406 에러 수정, 타이머 바 CSS 애니메이션 전환, max-width 480px 복원
+
 ## 다음 단계 (미구현 → 티켓으로 관리)
 
 기존 백로그는 `planning/` 하위의 에픽/티켓으로 관리된다:
@@ -86,6 +102,7 @@
 |---|---|---|
 | E-S001 | ELO 레이팅 시스템 | T-S001, T-S002 |
 | E-S002 | Supabase Realtime 정식 활성화 | T-S003 |
+| E-RSG001 | 반응속도 게임 MVP | T-RSG001~T-RSG007 (완료) |
 | E-BP001 | 블록 퍼즐 MVP | T-BP001, T-BP002, T-BP003 |
 
 ### 아직 에픽/티켓화되지 않은 항목
