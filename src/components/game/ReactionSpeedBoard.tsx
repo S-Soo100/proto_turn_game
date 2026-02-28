@@ -176,17 +176,15 @@ const Wrapper = styled.div`
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 480px;
-  margin: 0 auto;
   height: 100%;
   min-height: 0;
 `
 
 const HUD = styled.div`
-  padding: 12px 16px 8px;
+  padding: 8px 12px 4px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
 `
 
@@ -216,18 +214,17 @@ const TimerFill = styled.div`
 const GameArea = styled.div`
   position: relative;
   flex: 1;
-  min-height: 300px;
   background: #f9fafb;
   border: 2px solid #e5e7eb;
-  border-radius: 12px;
-  margin: 0 8px;
+  border-radius: 8px;
+  margin: 0 4px;
   overflow: hidden;
   touch-action: none;
   user-select: none;
 `
 
 const StatusBar = styled.div`
-  padding: 10px 16px;
+  padding: 8px 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;

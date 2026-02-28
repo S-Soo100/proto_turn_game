@@ -375,10 +375,12 @@ const BigStartButton = styled.button`
 `
 
 const GameWrapper = styled.div`
-  flex: 1;
   display: flex;
   flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
   padding-top: max(0px, env(safe-area-inset-top));
+  padding-bottom: max(0px, env(safe-area-inset-bottom));
 `
 
 const ResultOverlayMotion = styled(motion.div)`

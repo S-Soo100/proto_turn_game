@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import styled from '@emotion/styled'
+import { keyframes } from '@emotion/react'
 import { motion } from 'framer-motion'
 import type { TargetScheduleItem, Grade } from '@/lib/game-logic/reaction-speed'
 
@@ -25,9 +26,9 @@ const GRADE_LABELS: Record<Grade, string> = {
 }
 
 // Inner circle size (hit target)
-const INNER_SIZE = 48
+const INNER_SIZE = 32
 // Outer circle starts at this size and shrinks to INNER_SIZE
-const OUTER_START_SIZE = 120
+const OUTER_START_SIZE = 64
 
 export default function TargetCircle({ target, gameElapsedMs, onHit, onMiss }: Props) {
   const [hit, setHit] = useState<{ grade: Grade; score: number } | null>(null)
@@ -36,7 +37,6 @@ export default function TargetCircle({ target, gameElapsedMs, onHit, onMiss }: P
   const hitRef = useRef(false)
 
   const elapsed = gameElapsedMs - target.spawnTime
-  const progress = Math.min(1, elapsed / target.duration)
   const expired = elapsed >= target.duration
 
   // Handle expiry (miss)
@@ -56,9 +56,6 @@ export default function TargetCircle({ target, gameElapsedMs, onHit, onMiss }: P
       setHit(result)
     }
   }
-
-  // Outer ring current size
-  const outerSize = OUTER_START_SIZE - progress * (OUTER_START_SIZE - INNER_SIZE)
 
   const isNormal = target.type === 'normal'
   const baseColor = isNormal ? '#3b82f6' : '#ef4444'
@@ -114,13 +111,11 @@ export default function TargetCircle({ target, gameElapsedMs, onHit, onMiss }: P
       style={{ left: `${target.x}%`, top: `${target.y}%` }}
       onClick={handleClick}
     >
-      {/* Outer shrinking ring */}
+      {/* Outer shrinking ring — CSS animation, no React re-render needed */}
       <OuterRing
         style={{
-          width: outerSize,
-          height: outerSize,
+          animationDuration: `${target.duration}ms`,
           borderColor: baseColor,
-          opacity: 0.6 + progress * 0.4,
         }}
       />
       {/* Inner target circle */}
@@ -152,12 +147,19 @@ const Container = styled.div`
   -webkit-tap-highlight-color: transparent;
 `
 
+const shrinkRing = keyframes`
+  from { width: ${OUTER_START_SIZE}px; height: ${OUTER_START_SIZE}px; opacity: 0.5; }
+  to   { width: ${INNER_SIZE}px; height: ${INNER_SIZE}px; opacity: 1; }
+`
+
 const OuterRing = styled.div`
   position: absolute;
   border-radius: 50%;
   border: 3px solid;
   pointer-events: none;
-  transition: width 16ms linear, height 16ms linear;
+  width: ${OUTER_START_SIZE}px;
+  height: ${OUTER_START_SIZE}px;
+  animation: ${shrinkRing} linear forwards;
 `
 
 const InnerCircle = styled.div`
@@ -171,7 +173,7 @@ const InnerCircle = styled.div`
 `
 
 const SpeedLabel = styled.span`
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 800;
   color: #ef4444;
   user-select: none;
