@@ -61,9 +61,34 @@
 - **HomePage 수정**: 오목 카드 활성화 (`ACTIVE_GAMES` 배열로 분리), 게임별 바텀시트 타이틀 동적 표시
 - **PvP 마크 표시**: 오목 PvP에서 플레이어 바에 🐻/🐰 이모지로 마크 표시
 
-## 다음 단계 (미구현)
-- ELO 레이팅 시스템 실제 반영 (게임 종료 시 점수 계산)
+### 5단계: 기획 문서 체계화 + 개발 워크플로우 ✅
+- **문서 구조 재편**: `planning/` 하위를 게임별 폴더로 분리 (shared, tictactoe, gomoku, block-puzzle)
+  - 기존 00~07 문서 → `planning/archive/`로 이동
+  - 리서치 문서 → `planning/block-puzzle/research/`로 이동
+- **템플릿 4종 생성**: `planning/templates/`
+  - `epic-template.md`, `ticket-template.md`, `usecase-template.md`, `game-overview-template.md`
+- **게임별 overview 3개**: tictactoe, gomoku (released), block-puzzle (research)
+- **티켓 기반 워크플로우**: `.claude/rules/workflow.md`
+  - ID 컨벤션 (E-/T-/UC- + 스코프 코드), 상태 워크플로우 (draft→ready→in-progress→review→done)
+  - Claude 자동 구현 파이프라인 (티켓 분석→브랜치→구현→빌드→PR→문서 최신화)
+  - 커밋 컨벤션: `feat(T-{ID}): {설명}`
+- **샘플 에픽/티켓 생성**:
+  - `E-S001` ELO 레이팅 (T-S001, T-S002)
+  - `E-S002` Realtime 활성화 (T-S003)
+  - `E-BP001` 블록 퍼즐 MVP (T-BP001, T-BP002, T-BP003)
+- **기존 규칙 업데이트**: CLAUDE.md 인덱스에 workflow.md 추가, update-guide.md에 티켓 규칙 추가
+
+## 다음 단계 (미구현 → 티켓으로 관리)
+
+기존 백로그는 `planning/` 하위의 에픽/티켓으로 관리된다:
+
+| 에픽 | 내용 | 티켓 |
+|---|---|---|
+| E-S001 | ELO 레이팅 시스템 | T-S001, T-S002 |
+| E-S002 | Supabase Realtime 정식 활성화 | T-S003 |
+| E-BP001 | 블록 퍼즐 MVP | T-BP001, T-BP002, T-BP003 |
+
+### 아직 에픽/티켓화되지 않은 항목
 - 게임 히스토리 페이지
 - 방 나가기 시 상대방에게 알림
-- Supabase Realtime 정식 활성화 (`ALTER TABLE games REPLICA IDENTITY FULL;` + Dashboard Realtime 탭)
 - 오목 PvP 로비에서 게임 타입 구분 표시

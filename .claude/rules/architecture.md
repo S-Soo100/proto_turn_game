@@ -75,5 +75,23 @@ supabase/migrations/
     ├── architecture.md    # 이 파일: 화면 흐름, 파일 구조, Realtime
     ├── progress.md        # 완료 단계 + 다음 단계
     ├── troubleshooting.md # 버그/에러 해결 이력
-    └── update-guide.md    # 문서 최신화 규칙
+    ├── update-guide.md    # 문서 최신화 규칙
+    └── workflow.md        # 티켓 기반 개발 워크플로우
+
+planning/
+├── README.md              # 사용 가이드 + 스코프 코드 테이블
+├── templates/             # 문서 템플릿 (epic, ticket, usecase, game-overview)
+├── shared/                # 게임 공통 기능 (에픽: E-S001 ELO, E-S002 Realtime)
+│   ├── epics/
+│   ├── tickets/
+│   └── usecases/
+├── tictactoe/             # 틱택토 (overview + 에픽/티켓/유즈케이스)
+├── gomoku/                # 오목
+├── block-puzzle/          # 블록 퍼즐 (에픽: E-BP001 MVP)
+│   ├── overview.md
+│   ├── research/          # 리서치 문서 (타입 분석, 트렌드)
+│   ├── epics/
+│   ├── tickets/
+│   └── usecases/
+└── archive/               # 기존 00~07 기획 문서 보관
 ```

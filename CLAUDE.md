@@ -10,6 +10,7 @@
 | [`.claude/rules/progress.md`](.claude/rules/progress.md) | 완료된 단계, 다음 단계 |
 | [`.claude/rules/troubleshooting.md`](.claude/rules/troubleshooting.md) | 버그/에러 해결 이력 |
 | [`.claude/rules/update-guide.md`](.claude/rules/update-guide.md) | 문서 최신화 규칙 (언제 어떤 파일을 수정하는가) |
+| [`.claude/rules/workflow.md`](.claude/rules/workflow.md) | 티켓 기반 개발 워크플로우, 자동화 파이프라인 |
 
 ## 필수 규칙
 - 모든 문서는 **한국어**, 코드(변수명/함수명/주석)는 **영어**

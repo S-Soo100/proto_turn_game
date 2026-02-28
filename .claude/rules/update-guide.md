@@ -12,6 +12,9 @@
 | 기술 스택 변경 / Supabase 설정 변경 | `.claude/rules/stack.md` |
 | 화면 흐름 변경 / 라우트 추가 | `.claude/rules/architecture.md` |
 | 문서 관리 규칙 변경 | `.claude/rules/update-guide.md` (이 파일) |
+| 티켓 구현 시작/완료 | 해당 티켓 파일 status 변경 |
+| 에픽 내 모든 티켓 완료 | 에픽 파일 status: done |
+| 새 게임 추가 | `planning/{game}/` 폴더 생성 + `planning/README.md` 스코프 코드 등록 |
 
 ## 최신화 시 체크리스트
 
