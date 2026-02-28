@@ -5,7 +5,7 @@
 | **ID** | T-RSG002 |
 | **에픽** | E-RSG001 |
 | **게임** | reaction-speed-game |
-| **상태** | ready |
+| **상태** | review |
 | **우선순위** | high |
 | **담당** | claude |
 | **생성일** | 2026-02-28 |
