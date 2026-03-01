@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { User, Session } from '@supabase/supabase-js'
 import type { Profile } from '@/types/database'
+import { supabase } from '@/lib/supabase'
 
 interface AuthState {
   user: User | null
@@ -13,9 +14,10 @@ interface AuthState {
   setProfile: (profile: Profile | null) => void
   setLoading: (isLoading: boolean) => void
   signOut: () => void
+  updateProfile: (updates: Partial<Pick<Profile, 'username'>>) => Promise<void>
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   session: null,
   profile: null,
@@ -26,4 +28,18 @@ export const useAuthStore = create<AuthState>((set) => ({
   setProfile: (profile) => set({ profile }),
   setLoading: (isLoading) => set({ isLoading }),
   signOut: () => set({ user: null, session: null, profile: null }),
+
+  updateProfile: async (updates) => {
+    const profile = get().profile
+    if (!profile) throw new Error('No profile')
+
+    const { error } = await supabase
+      .from('profiles')
+      .update(updates)
+      .eq('id', profile.id)
+
+    if (error) throw error
+
+    set({ profile: { ...profile, ...updates } })
+  },
 }))
