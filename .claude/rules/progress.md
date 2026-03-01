@@ -104,6 +104,29 @@
   - DB 변경 없음 (기존 RLS 활용)
 - **Vercel SPA 라우팅 수정**: `vercel.json` 추가 — 직접 URL 접근 시 404 방지 (rewrites → `/index.html`)
 
+### 8단계: 테스트 인프라 도입 (Phase 1~3) ✅
+- **Phase 1 — Unit 테스트 (Vitest)**:
+  - `vitest`, `@testing-library/react`, `@testing-library/jest-dom`, `jsdom` 설치
+  - `vite.config.ts`에 `vitest/config` 설정 (jsdom, globals, setupFiles)
+  - `src/test/setup.ts` — 테스트 셋업 파일
+  - 틱택토 Unit 테스트 25개 (`tictactoe.test.ts`)
+  - 오목 Unit 테스트 23개 (`gomoku.test.ts`)
+  - 반응속도 게임 Unit 테스트 40개 (`reaction-speed.test.ts`)
+- **Phase 2 — Integration 테스트 (RTL)**:
+  - TicTacToeBoard 컴포넌트 테스트 17개 (렌더링, 상태 텍스트, 클릭 인터랙션)
+  - GomokuBoard 컴포넌트 테스트 16개
+  - LoginForm 테스트 6개 (렌더링, 비밀번호 토글, 로그인 플로우)
+  - SignupForm 테스트 9개 (유효성 검증, API 에러 한국어화, 성공 플로우)
+  - HomePage 테스트 16개 (게임 선택 플로우, 프로필 수정, 로그아웃)
+- **Phase 3 — E2E 테스트 (Playwright)**:
+  - `@playwright/test` + Chromium 설치
+  - `playwright.config.ts` — Vite dev server 자동 실행
+  - 로그인/회원가입 페이지 E2E 6개
+  - 네비게이션 E2E 2개 (미인증 리다이렉트, SPA 라우팅)
+  - AI 게임 플로우 E2E 4개 (모드/난이도 선택, 프로필 수정, 비활성 게임)
+- **총 테스트**: Unit 88개 + Integration 64개 + E2E 12개 = **164개**
+- **규칙**: 새 게임 추가 시 반드시 Unit 테스트 + Integration 테스트 함께 작성
+
 ## 다음 단계 (미구현 → 티켓으로 관리)
 
 기존 백로그는 `planning/` 하위의 에픽/티켓으로 관리된다:

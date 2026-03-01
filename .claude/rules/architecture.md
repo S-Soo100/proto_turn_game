@@ -79,7 +79,21 @@ supabase/migrations/
 # gomoku, reaction-speed-game game_types 행은 SQL Editor에서 수동 INSERT (마이그레이션 파일 없음)
 # leaderboard 테이블도 SQL Editor에서 수동 생성 (솔로 게임 랭킹용)
 
+src/test/
+└── setup.ts                           # @testing-library/jest-dom import (테스트 셋업)
+
+# 테스트 파일 (*.test.ts, *.test.tsx)은 대상 파일 옆에 co-locate
+# src/lib/game-logic/tictactoe.test.ts, gomoku.test.ts, reaction-speed.test.ts
+# src/components/game/TicTacToeBoard.test.tsx, GomokuBoard.test.tsx
+# src/components/auth/LoginForm.test.tsx, SignupForm.test.tsx
+# src/pages/HomePage.test.tsx
+
+e2e/                                   # Playwright E2E 테스트
+├── home.spec.ts                       # 로그인/회원가입/네비게이션 E2E
+└── game-ai.spec.ts                    # AI 게임 플로우 E2E (Supabase API 인터셉트)
+
 vercel.json                            # SPA 라우팅: 모든 경로 → /index.html rewrites
+playwright.config.ts                   # Playwright 설정 (Chromium, Vite webServer)
 
 .claude/
 ├── settings.local.json

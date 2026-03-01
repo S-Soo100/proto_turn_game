@@ -7,6 +7,7 @@
 - **Animation**: Framer Motion
 - **Routing**: React Router v7
 - **Backend**: Supabase (Auth + DB + Realtime + Storage)
+- **Testing**: Vitest 4 + @testing-library/react + Playwright (Chromium)
 - **Package manager**: pnpm
 
 ## Supabase 프로젝트
