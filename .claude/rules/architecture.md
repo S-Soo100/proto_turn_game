@@ -3,6 +3,7 @@
 ## 화면 흐름
 ```
 / (홈)
+├── 프로필 카드 탭 → 프로필 수정 바텀시트 (닉네임 변경)
 ├── 틱택토 / 오목 클릭 → 바텀시트 (게임 타입 저장)
 │     ├── AI 대전 → 난이도 선택 → /game/:gameId (AI, game_type_id 포함)
 │     └── 친구와 대전 → /lobby
@@ -56,16 +57,16 @@ src/
 │   └── game-logic/
 │       ├── tictactoe.ts             # 순수 게임 로직 + 미니맥스 AI
 │       ├── gomoku.ts                # GomokuState/Result + 알파베타 AI (깊이 2/4)
-│       └── reaction-speed.ts        # 타겟 스케줄 생성 + 점수/콤보/등급 계산 (seeded RNG)
+│       └── reaction-speed.ts        # 타겟 스케줄 생성 (Normal 55 + Speed 30 + Decoy 15) + 점수/콤보/등급 계산 (seeded RNG)
 ├── pages/
 │   ├── LoginPage.tsx
 │   ├── SignupPage.tsx
-│   ├── HomePage.tsx                 # 게임 카드(틱택토/오목/반응속도) → 모드/난이도 바텀시트, SOLO_GAMES 배열
+│   ├── HomePage.tsx                 # 게임 카드(틱택토/오목/반응속도) → 모드/난이도 바텀시트, SOLO_GAMES 배열, 프로필 수정 바텀시트
 │   ├── LobbyPage.tsx                # PvP 로비: 대기방 목록(Realtime+폴링) + 새 게임 + 초대링크
 │   ├── GamePage.tsx                 # game.game_type_id 기준 보드 조건부 렌더링
 │   └── ReactionSpeedPage.tsx        # 반응속도 게임 페이지: lobby/playing/result 3단계 흐름
 ├── store/
-│   ├── authStore.ts
+│   ├── authStore.ts                 # updateProfile() — 닉네임 수정 (Supabase UPDATE + 로컬 갱신)
 │   └── gameStore.ts                 # GameTypeId 타입, startNewGame/createPvpGame에 gameTypeId 파라미터
 └── types/
     └── database.ts
@@ -77,6 +78,8 @@ supabase/migrations/
 
 # gomoku, reaction-speed-game game_types 행은 SQL Editor에서 수동 INSERT (마이그레이션 파일 없음)
 # leaderboard 테이블도 SQL Editor에서 수동 생성 (솔로 게임 랭킹용)
+
+vercel.json                            # SPA 라우팅: 모든 경로 → /index.html rewrites
 
 .claude/
 ├── settings.local.json

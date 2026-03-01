@@ -93,6 +93,16 @@
 - **라우트**: `/reaction-speed` 추가
 - **QA 수정 (T-RSG006)**: 원 크기 축소 (Inner 32px, Outer 64px), CSS 축소 애니메이션 전환, 모바일 세로 레이아웃 최적화
 - **QA 수정 (T-RSG007)**: leaderboard `.maybeSingle()` 406 에러 수정, 타이머 바 CSS 애니메이션 전환, max-width 480px 복원
+- **기능 추가 (T-RSG008)**: 디코이(아군) 타겟 추가 (초록 💚, -50점 감점, 콤보 리셋), 스피드 이모지 🚨 변경, 일시정지/재개 기능, 점수 미저장 종료
+  - 타겟 구성 변경: Normal 55 + Speed 30 + Decoy 15 (총 100개)
+
+### 7단계: 프로필 수정 + Vercel SPA 라우팅 ✅
+- **프로필 수정 (T-S004)**:
+  - `authStore.ts`에 `updateProfile()` 메서드 추가 (Supabase UPDATE + 로컬 상태 갱신)
+  - `HomePage.tsx`에 프로필 수정 바텀시트 추가 (ProfileCard 탭 → 닉네임 수정)
+  - 유효성 검증 (3~20자), 중복 닉네임 에러 처리
+  - DB 변경 없음 (기존 RLS 활용)
+- **Vercel SPA 라우팅 수정**: `vercel.json` 추가 — 직접 URL 접근 시 404 방지 (rewrites → `/index.html`)
 
 ## 다음 단계 (미구현 → 티켓으로 관리)
 
@@ -102,7 +112,8 @@
 |---|---|---|
 | E-S001 | ELO 레이팅 시스템 | T-S001, T-S002 |
 | E-S002 | Supabase Realtime 정식 활성화 | T-S003 |
-| E-RSG001 | 반응속도 게임 MVP | T-RSG001~T-RSG007 (완료) |
+| E-RSG001 | 반응속도 게임 MVP | T-RSG001~T-RSG008 (완료) |
+| — | 프로필 수정 기능 | T-S004 (완료) |
 | E-BP001 | 블록 퍼즐 MVP | T-BP001, T-BP002, T-BP003 |
 
 ### 아직 에픽/티켓화되지 않은 항목
