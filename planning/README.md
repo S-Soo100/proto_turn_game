@@ -13,7 +13,8 @@ planning/
 │   ├── epic-template.md
 │   ├── ticket-template.md
 │   ├── usecase-template.md
-│   └── game-overview-template.md
+│   ├── game-overview-template.md
+│   └── chaos-rule-template.md
 ├── shared/                      # 게임 공통 기능
 │   ├── epics/
 │   ├── tickets/
@@ -39,6 +40,13 @@ planning/
 │   ├── epics/
 │   ├── tickets/
 │   └── usecases/
+├── gonggi/                      # 공기놀이 (열받는 게임)
+│   ├── overview.md
+│   ├── epics/
+│   ├── tickets/
+│   ├── usecases/
+│   ├── chaos-rules/             # 변칙 룰 문서 (CR-GG###)
+│   └── research/
 └── archive/                     # 기존 문서 보관
 ```
 
@@ -51,6 +59,7 @@ planning/
 | `GM` | Gomoku (오목) | `planning/gomoku/` |
 | `BP` | Block Puzzle (블록 퍼즐) | `planning/block-puzzle/` |
 | `RSG` | Reaction Speed Game (반응속도 게임) | `planning/reaction-speed-game/` |
+| `GG` | Gonggi (공기놀이) | `planning/gonggi/` |
 
 새 게임 추가 시 스코프 코드를 이 테이블에 등록한다.
 
@@ -61,6 +70,7 @@ planning/
 | Epic | `E-{SCOPE}{NNN}` | `E-S001`, `E-BP001` |
 | Ticket | `T-{SCOPE}{NNN}` | `T-S001`, `T-BP003` |
 | Use Case | `UC-{SCOPE}{NNN}` | `UC-GM002` |
+| Chaos Rule | `CR-{SCOPE}{NNN}` | `CR-GG001` |
 
 ## 상태 워크플로우
 
@@ -86,6 +96,11 @@ draft → ready → in-progress → review → done
 2. `planning/{game}/tickets/T-{SCOPE}{NNN}.md`로 저장
 3. 에픽과 연결, 구현 가이드 + 수락 기준 작성
 
+### 새 변칙 룰 작성 (공기놀이)
+1. `planning/templates/chaos-rule-template.md`를 복사
+2. `planning/gonggi/chaos-rules/CR-GG{NNN}.md`로 저장
+3. 발동 조건, 연출, 게임 영향, 열받음 지수 작성
+
 ### Claude에게 구현 요청
 ```
 "T-BP001 구현해줘"          # 특정 티켓 구현
@@ -103,3 +118,4 @@ draft → ready → in-progress → review → done
 | `ticket-template.md` | 티켓 (단위 작업) 문서 |
 | `usecase-template.md` | 유즈케이스 (사용 시나리오) 문서 |
 | `game-overview-template.md` | 게임별 개요 문서 |
+| `chaos-rule-template.md` | 변칙 룰 (트롤 이벤트) 문서 |
