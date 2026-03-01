@@ -63,7 +63,8 @@ const ScrollArea = styled.div`
 
 // ─── Profile section ───────────────────────────────────────────────────────
 
-const ProfileCard = styled.div`
+const ProfileCard = styled.button`
+  width: 100%;
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   border-radius: 16px;
   padding: 20px;
@@ -71,6 +72,18 @@ const ProfileCard = styled.div`
   display: flex;
   align-items: center;
   gap: 16px;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+
+  &:active { opacity: 0.9; }
+`
+
+const EditIcon = styled.div`
+  font-size: 18px;
+  opacity: 0.7;
+  flex-shrink: 0;
 `
 
 const Avatar = styled.div`
@@ -297,6 +310,70 @@ const ModeText = styled.div`flex: 1;`
 const ModeName = styled.div`font-size: 15px; font-weight: 700; color: #111827;`
 const ModeDesc = styled.div`font-size: 12px; color: #6b7280; margin-top: 2px;`
 
+// ─── Profile edit sheet ─────────────────────────────────────────────────────
+
+const ProfileInput = styled.input`
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 15px;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.15s;
+
+  &:focus { border-color: #6366f1; }
+`
+
+const InputHint = styled.div`
+  font-size: 12px;
+  color: #9ca3af;
+  margin-top: 6px;
+`
+
+const InputError = styled.div`
+  font-size: 12px;
+  color: #ef4444;
+  margin-top: 6px;
+`
+
+const ProfileSheetButtons = styled.div`
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+`
+
+const SaveButton = styled.button`
+  flex: 1;
+  padding: 14px;
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+
+  &:disabled { opacity: 0.5; }
+  &:active:not(:disabled) { background: #4f46e5; }
+`
+
+const CancelButton = styled.button`
+  flex: 1;
+  padding: 14px;
+  background: #f3f4f6;
+  color: #6b7280;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+
+  &:active { background: #e5e7eb; }
+`
+
 const DIFFICULTIES: { value: AIDifficulty; emoji: string; name: string; desc: string }[] = [
   { value: 'easy', emoji: '😊', name: '쉬움', desc: '무작위로 둡니다' },
   { value: 'medium', emoji: '🤔', name: '보통', desc: '가끔 최선의 수를 둡니다' },
@@ -321,7 +398,7 @@ const FUTURE_GAMES = [
 export function HomePage() {
   const navigate = useNavigate()
   const { logout } = useAuth()
-  const { profile } = useAuthStore()
+  const { profile, updateProfile } = useAuthStore()
   const { startNewGame } = useGameStore()
 
   const [showSheet, setShowSheet] = useState(false)
@@ -329,6 +406,12 @@ export function HomePage() {
   const [selectedDiff, setSelectedDiff] = useState<AIDifficulty>('medium')
   const [selectedGameType, setSelectedGameType] = useState<GameTypeId>('tictactoe')
   const [isStarting, setIsStarting] = useState(false)
+
+  // Profile edit state
+  const [showProfileSheet, setShowProfileSheet] = useState(false)
+  const [editUsername, setEditUsername] = useState('')
+  const [profileError, setProfileError] = useState('')
+  const [profileSaving, setProfileSaving] = useState(false)
 
   function handleOpenSheet(gameTypeId: GameTypeId) {
     setSelectedGameType(gameTypeId)
@@ -356,6 +439,39 @@ export function HomePage() {
     }
   }
 
+  function handleOpenProfileSheet() {
+    setEditUsername(profile?.username ?? '')
+    setProfileError('')
+    setShowProfileSheet(true)
+  }
+
+  async function handleSaveProfile() {
+    const trimmed = editUsername.trim()
+    if (trimmed.length < 3 || trimmed.length > 20) {
+      setProfileError('닉네임은 3~20자여야 합니다')
+      return
+    }
+    if (trimmed === profile?.username) {
+      setShowProfileSheet(false)
+      return
+    }
+    setProfileSaving(true)
+    setProfileError('')
+    try {
+      await updateProfile({ username: trimmed })
+      setShowProfileSheet(false)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('duplicate') || msg.includes('unique') || msg.includes('23505')) {
+        setProfileError('이미 사용 중인 닉네임입니다')
+      } else {
+        setProfileError('저장에 실패했습니다. 다시 시도해주세요')
+      }
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
   const selectedGame = ACTIVE_GAMES.find((g) => g.gameTypeId === selectedGameType)
 
   const initial = profile?.username?.charAt(0).toUpperCase() ?? '?'
@@ -369,12 +485,13 @@ export function HomePage() {
 
       <ScrollArea>
         {/* Profile */}
-        <ProfileCard>
+        <ProfileCard onClick={handleOpenProfileSheet}>
           <Avatar>{initial}</Avatar>
           <ProfileInfo>
             <Username>{profile?.username ?? '...'}</Username>
             <EloRow>ELO {profile?.elo_rating ?? 1200} · {profile?.total_games ?? 0}게임</EloRow>
           </ProfileInfo>
+          <EditIcon>{'>'}</EditIcon>
         </ProfileCard>
 
         {/* Game list */}
@@ -478,6 +595,53 @@ export function HomePage() {
                   </StartButton>
                 </>
               )}
+            </Sheet>
+          </Overlay>
+        )}
+      </AnimatePresence>
+
+      {/* Profile edit bottom sheet */}
+      <AnimatePresence>
+        {showProfileSheet && (
+          <Overlay
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowProfileSheet(false)}
+          >
+            <Sheet
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SheetHandle />
+              <SheetTitle>프로필 수정</SheetTitle>
+              <SheetSub>닉네임을 변경할 수 있습니다</SheetSub>
+
+              <div>
+                <ProfileInput
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(e.target.value)}
+                  placeholder="닉네임 입력"
+                  maxLength={20}
+                />
+                {profileError ? (
+                  <InputError>{profileError}</InputError>
+                ) : (
+                  <InputHint>3~20자, 영문/한글/숫자</InputHint>
+                )}
+              </div>
+
+              <ProfileSheetButtons>
+                <CancelButton onClick={() => setShowProfileSheet(false)}>
+                  취소
+                </CancelButton>
+                <SaveButton onClick={handleSaveProfile} disabled={profileSaving}>
+                  {profileSaving ? '저장 중...' : '저장'}
+                </SaveButton>
+              </ProfileSheetButtons>
             </Sheet>
           </Overlay>
         )}
