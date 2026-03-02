@@ -5,6 +5,7 @@
 - **Styling**: @emotion/styled (CSS-in-JS, Tailwind 없음)
 - **State**: Zustand
 - **Animation**: Framer Motion
+- **Physics**: matter-js (공기놀이 돌 물리 시뮬레이션)
 - **Routing**: React Router v7
 - **Backend**: Supabase (Auth + DB + Realtime + Storage)
 - **Testing**: Vitest 4 + @testing-library/react + Playwright (Chromium)

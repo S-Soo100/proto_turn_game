@@ -127,6 +127,35 @@
 - **총 테스트**: Unit 88개 + Integration 64개 + E2E 12개 = **164개**
 - **규칙**: 새 게임 추가 시 반드시 Unit 테스트 + Integration 테스트 함께 작성
 
+### 9단계: 공기놀이 게임 (솔로, 변칙 룰) ✅
+- **Game Logic**: `src/lib/game-logic/gonggi.ts`
+  - `GonggiState` (5 stones, stage 1~5, substep, phase, round, failCount)
+  - 단계별 로직: 일단(1개×4), 이단(2개×2), 삼단(3+1), 사단(4개), 꺾기(전체)
+  - 순수 함수: createInitialState, scatterStones, startToss, pickStones, catchStone 등
+  - seeded RNG (mulberry32)
+- **Chaos Engine**: `src/lib/game-logic/gonggi-chaos.ts`
+  - 라운드별 발동 확률: R1-2: 0%, R3: 30%, R4: 50%, R5+: 70~90%
+  - 7개 변칙 룰: bird-transform, cat-swipe, stone-eyes, fake-clear, split, danmaku, screen-flip
+  - 각 룰 별도 파일: `src/lib/game-logic/chaos-rules/*.ts`
+- **Physics**: `src/lib/physics/gonggi-physics.ts` (matter.js 물리 래퍼)
+  - stone 5개 Body, 벽/바닥, toss/scatter/catSwipe/flee force
+- **Component**: `src/components/game/GonggiBoard.tsx`
+  - 2.5D 렌더링 (CSS perspective), 물리 좌표 기반 돌 위치
+  - 터치 스와이프로 돌 선택, 버튼으로 던지기/잡기
+  - 변칙 룰 이펙트 오버레이 (AnimatePresence)
+  - 일시정지/재개, 탄막 댓글, 화면 뒤집기 CSS
+- **Chaos Effects**: `src/components/game/chaos/`
+  - BirdTransformEffect, CatSwipeEffect, StoneEyesEffect
+  - FakeClearEffect, SplitEffect, DanmakuOverlay
+- **Page**: `src/pages/GonggiPage.tsx` — lobby/playing/result 3단계 흐름
+- **Leaderboard**: `src/lib/gonggi-leaderboard.ts` + `GonggiLeaderboard.tsx`
+  - 클리어 시간 ASC 정렬, 실패 횟수, 변칙 생존 횟수 표시
+- **라우트**: `/gonggi` 추가, HomePage SOLO_GAMES에 공기놀이 카드 추가
+- **의존성**: `matter-js` + `@types/matter-js` 추가
+- **DB**: `game_types`에 gonggi 행 INSERT + `gonggi_leaderboard` 테이블 생성 필요 (SQL Editor)
+- **테스트**: gonggi.test.ts 58개 + gonggi-chaos.test.ts 36개 + GonggiBoard.test.tsx 11개 = **105개**
+- **총 테스트**: 기존 164개 → **258개** (신규 94개)
+
 ## 다음 단계 (미구현 → 티켓으로 관리)
 
 기존 백로그는 `planning/` 하위의 에픽/티켓으로 관리된다:
@@ -137,6 +166,7 @@
 | E-S002 | Supabase Realtime 정식 활성화 | T-S003 |
 | E-RSG001 | 반응속도 게임 MVP | T-RSG001~T-RSG008 (완료) |
 | — | 프로필 수정 기능 | T-S004 (완료) |
+| E-GG001 | 공기놀이 MVP (Chaos-only) | T-GG001~T-GG008 (완료) |
 | E-BP001 | 블록 퍼즐 MVP | T-BP001, T-BP002, T-BP003 |
 
 ### 아직 에픽/티켓화되지 않은 항목

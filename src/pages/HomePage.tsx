@@ -387,6 +387,7 @@ const ACTIVE_GAMES: { gameTypeId: GameTypeId; emoji: string; name: string; desc:
 
 const SOLO_GAMES: { path: string; emoji: string; name: string; desc: string }[] = [
   { path: '/reaction-speed', emoji: '🎯', name: '반응속도 게임', desc: '120초 동안 타겟 서클을 클릭하여 최고 점수 달성' },
+  { path: '/gonggi', emoji: '🫴', name: '공기놀이', desc: '열받는 변칙 룰과 함께 5단 클리어에 도전' },
 ]
 
 const FUTURE_GAMES = [

@@ -7,6 +7,7 @@ import { HomePage } from '@/pages/HomePage'
 import { LobbyPage } from '@/pages/LobbyPage'
 import { GamePage } from '@/pages/GamePage'
 import { ReactionSpeedPage } from '@/pages/ReactionSpeedPage'
+import { GonggiPage } from '@/pages/GonggiPage'
 
 function AppRoutes() {
   useAuth() // Initialize auth state listener
@@ -36,6 +37,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <ReactionSpeedPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/gonggi"
+        element={
+          <ProtectedRoute>
+            <GonggiPage />
           </ProtectedRoute>
         }
       />

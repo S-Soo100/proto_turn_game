@@ -107,6 +107,19 @@ describe('HomePage game list', () => {
     await user.click(screen.getByText('반응속도 게임'))
     expect(mockNavigate).toHaveBeenCalledWith('/reaction-speed')
   })
+
+  test('공기놀이 카드가 SOLO_GAMES에 표시된다', () => {
+    renderHomePage()
+    expect(screen.getByText('공기놀이')).toBeInTheDocument()
+    expect(screen.getByText(/변칙 룰/)).toBeInTheDocument()
+  })
+
+  test('공기놀이 클릭 시 /gonggi로 이동한다', async () => {
+    const user = userEvent.setup()
+    renderHomePage()
+    await user.click(screen.getByText('공기놀이'))
+    expect(mockNavigate).toHaveBeenCalledWith('/gonggi')
+  })
 })
 
 // ── Game mode selection flow ───────────────────────────────────────────────
