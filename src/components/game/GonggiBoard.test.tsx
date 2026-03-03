@@ -1,42 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import GonggiBoard from './GonggiBoard'
-
-// Mock matter-js
-vi.mock('matter-js', () => {
-  const mockBody = {
-    position: { x: 100, y: 200 },
-    angle: 0,
-    velocity: { x: 0, y: 0 },
-  }
-  return {
-    default: {
-      Engine: {
-        create: () => ({ world: { bodies: [] } }),
-        update: vi.fn(),
-        clear: vi.fn(),
-      },
-      World: {
-        add: vi.fn(),
-        clear: vi.fn(),
-      },
-      Bodies: {
-        rectangle: () => ({ ...mockBody, isStatic: true }),
-        circle: () => ({ ...mockBody }),
-      },
-      Body: {
-        setVelocity: vi.fn(),
-        applyForce: vi.fn(),
-        setPosition: vi.fn(),
-        setStatic: vi.fn(),
-      },
-      Events: {
-        on: vi.fn(),
-        off: vi.fn(),
-      },
-    },
-  }
-})
+import * as gonggiModule from '@/lib/game-logic/gonggi'
 
 // Mock framer-motion
 vi.mock('framer-motion', () => ({
@@ -54,15 +19,14 @@ describe('GonggiBoard', () => {
     vi.clearAllMocks()
   })
 
-  it('renders with initial scatter phase', () => {
+  it('renders with initial select phase', () => {
     render(<GonggiBoard onGameEnd={onGameEnd} onQuit={onQuit} />)
-    // Should show toss phase text since scatter auto-transitions
-    expect(screen.getByText(/던지세요/)).toBeInTheDocument()
+    // Should show select phase text since scatter auto-transitions to select
+    expect(screen.getByText(/골라주세요/)).toBeInTheDocument()
   })
 
   it('renders the board area', () => {
     const { container } = render(<GonggiBoard onGameEnd={onGameEnd} onQuit={onQuit} />)
-    // Board area is rendered (physics stones need real matter.js to produce positions)
     const board = container.querySelector('[class*="BoardArea"]') ?? container.querySelector('div')
     expect(board).toBeInTheDocument()
   })
@@ -77,9 +41,21 @@ describe('GonggiBoard', () => {
     expect(screen.getByText('00:00')).toBeInTheDocument()
   })
 
-  it('renders toss button in toss phase', () => {
+  it('shows select phase text (no toss button yet)', () => {
     render(<GonggiBoard onGameEnd={onGameEnd} onQuit={onQuit} />)
-    expect(screen.getByText(/던지기/)).toBeInTheDocument()
+    // In select phase, no toss button — player must select a stone first
+    expect(screen.getByText(/골라주세요/)).toBeInTheDocument()
+    expect(screen.queryByText(/던지기/)).not.toBeInTheDocument()
+  })
+
+  it('renders stone emojis on the board', () => {
+    render(<GonggiBoard onGameEnd={onGameEnd} onQuit={onQuit} />)
+    // Stones should be rendered as CSS-positioned elements
+    expect(screen.getByText('🟡')).toBeInTheDocument()
+    expect(screen.getByText('🔴')).toBeInTheDocument()
+    expect(screen.getByText('🔵')).toBeInTheDocument()
+    expect(screen.getByText('🟢')).toBeInTheDocument()
+    expect(screen.getByText('🟣')).toBeInTheDocument()
   })
 
   it('renders status bar with round, fail, chaos stats', () => {
@@ -111,16 +87,14 @@ describe('GonggiBoard', () => {
     expect(onQuit).toHaveBeenCalled()
   })
 
-  it('transitions to pick phase after toss', () => {
+  it('starts in select phase after scatter', () => {
     render(<GonggiBoard onGameEnd={onGameEnd} onQuit={onQuit} />)
-    fireEvent.click(screen.getByText(/던지기/))
-    // Should now show pick instruction
-    expect(screen.getByText(/스와이프하세요/)).toBeInTheDocument()
+    // After auto-scatter, stage 1 enters select phase
+    expect(screen.getByText(/골라주세요/)).toBeInTheDocument()
   })
 
   it('shows initial round as 1', () => {
     render(<GonggiBoard onGameEnd={onGameEnd} onQuit={onQuit} />)
-    // Find the stat value for round
     const roundValues = screen.getAllByText('1')
     expect(roundValues.length).toBeGreaterThan(0)
   })
@@ -129,5 +103,30 @@ describe('GonggiBoard', () => {
     render(<GonggiBoard onGameEnd={onGameEnd} onQuit={onQuit} />)
     const zeroValues = screen.getAllByText('0')
     expect(zeroValues.length).toBeGreaterThanOrEqual(2) // fail and chaos both 0
+  })
+
+  it('renders all 5 stone emojis', () => {
+    render(<GonggiBoard onGameEnd={onGameEnd} onQuit={onQuit} />)
+    const emojis = ['🟡', '🔴', '🔵', '🟢', '🟣']
+    emojis.forEach((emoji) => {
+      expect(screen.getByText(emoji)).toBeInTheDocument()
+    })
+  })
+
+  it('shows round-clear phase text and next round button', () => {
+    const roundClearState: gonggiModule.GonggiState = {
+      ...gonggiModule.createInitialState(42),
+      stage: 5,
+      round: 2,
+      phase: 'round-clear' as gonggiModule.GamePhase,
+    }
+    vi.spyOn(gonggiModule, 'createInitialState').mockReturnValue(roundClearState)
+    vi.spyOn(gonggiModule, 'scatterStones').mockReturnValue(roundClearState)
+
+    render(<GonggiBoard onGameEnd={onGameEnd} onQuit={onQuit} />)
+    expect(screen.getByText(/라운드 2 클리어/)).toBeInTheDocument()
+    expect(screen.getByText(/라운드 3 시작/)).toBeInTheDocument()
+
+    vi.restoreAllMocks()
   })
 })

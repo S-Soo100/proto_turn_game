@@ -2,12 +2,15 @@ import { describe, it, expect } from 'vitest'
 import {
   createInitialState,
   scatterStones,
+  selectStone,
+  holdStone,
   startToss,
   completeToss,
   pickStones,
   catchStone,
   advanceSubstep,
   advanceStage,
+  checkStageComplete,
   failSubstep,
   retryStage,
   loseStone,
@@ -19,6 +22,8 @@ import {
   getSubstepCount,
   getRequiredPickCount,
   getTimeLimit,
+  getTossDuration,
+  getCatchWindow,
   mulberry32,
   STONE_COUNT,
   MAX_STAGE,
@@ -118,6 +123,11 @@ describe('createInitialState', () => {
     expect(state.seed).toBe(SEED)
   })
 
+  it('all stones start with z=0', () => {
+    const state = createInitialState(SEED)
+    state.stones.forEach((s) => expect(s.z).toBe(0))
+  })
+
   it('deterministic with same seed', () => {
     const s1 = createInitialState(SEED)
     const s2 = createInitialState(SEED)
@@ -138,11 +148,17 @@ describe('createInitialState', () => {
 // ── scatterStones ──
 
 describe('scatterStones', () => {
-  it('sets all stones to floor and transitions to toss phase', () => {
-    const state = makeState({ phase: 'scatter' })
+  it('sets all stones to floor and transitions to select phase (stages 1-4)', () => {
+    const state = makeState({ phase: 'scatter', stage: 1 })
+    const next = scatterStones(state)
+    expect(next.phase).toBe('select')
+    next.stones.forEach((s) => expect(s.status).toBe('floor'))
+  })
+
+  it('transitions to toss phase for stage 5', () => {
+    const state = makeState({ phase: 'scatter', stage: 5 })
     const next = scatterStones(state)
     expect(next.phase).toBe('toss')
-    next.stones.forEach((s) => expect(s.status).toBe('floor'))
   })
 
   it('repositions stones randomly', () => {
@@ -152,23 +168,95 @@ describe('scatterStones', () => {
     const moved = next.stones.some((s, i) => s.x !== state.stones[i].x || s.y !== state.stones[i].y)
     expect(moved).toBe(true)
   })
+
+  it('resets all stones z to 0', () => {
+    const state = makeState()
+    const next = scatterStones(state)
+    next.stones.forEach((s) => expect(s.z).toBe(0))
+  })
+})
+
+// ── selectStone ──
+
+describe('selectStone', () => {
+  it('returns null if phase is not select', () => {
+    const state = makeState({ phase: 'toss' })
+    expect(selectStone(state, 0)).toBeNull()
+  })
+
+  it('returns null if stone is not on floor', () => {
+    const stones = createInitialState(SEED).stones.map((s, i) =>
+      i === 0 ? { ...s, status: 'hand' as const } : s
+    )
+    const state = makeState({ phase: 'select', stones })
+    expect(selectStone(state, 0)).toBeNull()
+  })
+
+  it('selects a floor stone and sets z=0.15', () => {
+    const state = makeState({ phase: 'select' })
+    const next = selectStone(state, 2)
+    expect(next).not.toBeNull()
+    expect(next!.selectedStoneId).toBe(2)
+    expect(next!.stones[2].z).toBe(0.15)
+  })
+
+  it('deselects previous stone when selecting a new one', () => {
+    const state = makeState({ phase: 'select', selectedStoneId: 0 })
+    const next = selectStone(state, 2)
+    expect(next).not.toBeNull()
+    expect(next!.stones[0].z).toBe(0)
+    expect(next!.stones[2].z).toBe(0.15)
+    expect(next!.selectedStoneId).toBe(2)
+  })
+})
+
+// ── holdStone ──
+
+describe('holdStone', () => {
+  it('returns null if phase is not select', () => {
+    const state = makeState({ phase: 'toss' })
+    expect(holdStone(state)).toBeNull()
+  })
+
+  it('returns null if no stone selected', () => {
+    const state = makeState({ phase: 'select', selectedStoneId: null })
+    expect(holdStone(state)).toBeNull()
+  })
+
+  it('moves selected stone to hand with z=0.3', () => {
+    const state = makeState({ phase: 'select', selectedStoneId: 1 })
+    const next = holdStone(state)
+    expect(next).not.toBeNull()
+    expect(next!.phase).toBe('hold')
+    expect(next!.stones[1].status).toBe('hand')
+    expect(next!.stones[1].z).toBe(0.3)
+  })
 })
 
 // ── startToss (stages 1-4) ──
 
 describe('startToss', () => {
-  it('does nothing if phase is not toss', () => {
+  it('does nothing if phase is not toss or hold', () => {
     const state = makeState({ phase: 'pick' })
     expect(startToss(state)).toBe(state)
   })
 
-  it('picks first floor stone and sets phase to pick', () => {
-    const state = makeState({ phase: 'toss' })
+  it('works from hold phase and sets phase to pick', () => {
+    const stones = createInitialState(SEED).stones.map((s, i) =>
+      i === 0 ? { ...s, status: 'hand' as const, z: 0.3 } : s
+    )
+    const state = makeState({ phase: 'hold', stones, selectedStoneId: 0 })
     const next = startToss(state)
     expect(next.phase).toBe('pick')
     expect(next.tossedStoneId).not.toBeNull()
     const tossed = next.stones.filter((s) => s.status === 'tossed')
     expect(tossed).toHaveLength(1)
+  })
+
+  it('works from toss phase (stage 5)', () => {
+    const state = makeState({ phase: 'toss' })
+    const next = startToss(state)
+    expect(next.phase).toBe('pick')
   })
 
   it('stage 5: tosses all stones, phase = catch', () => {
@@ -257,7 +345,8 @@ describe('catchStone', () => {
     const state = makeState({ phase: 'catch', stage: 1, substep: 0, stones })
     const next = catchStone(state, true)
     expect(next.stones[0].status).toBe('hand')
-    // Stage 1 has 4 substeps, so substep 0 → 1, phase = toss
+    // Stage 1 has 4 substeps, substep 0 → 1
+    // Both stones 0 and 1 are now 'hand', so next phase = toss
     expect(next.substep).toBe(1)
     expect(next.phase).toBe('toss')
   })
@@ -273,8 +362,26 @@ describe('catchStone', () => {
 // ── advanceSubstep ──
 
 describe('advanceSubstep', () => {
-  it('advances substep within same stage', () => {
+  it('advances substep to select if no hand stone', () => {
     const state = makeState({ stage: 1, substep: 0 })
+    // All stones on floor → next substep goes to select
+    const next = advanceSubstep(state)
+    expect(next.substep).toBe(1)
+    expect(next.phase).toBe('select')
+  })
+
+  it('advances substep to toss if hand stone exists', () => {
+    const stones = createInitialState(SEED).stones.map((s, i) =>
+      i === 0 ? { ...s, status: 'hand' as const } : s
+    )
+    const state = makeState({ stage: 1, substep: 0, stones })
+    const next = advanceSubstep(state)
+    expect(next.substep).toBe(1)
+    expect(next.phase).toBe('toss')
+  })
+
+  it('advances substep to toss for stage 5', () => {
+    const state = makeState({ stage: 5, substep: 0 })
     const next = advanceSubstep(state)
     expect(next.substep).toBe(1)
     expect(next.phase).toBe('toss')
@@ -287,17 +394,17 @@ describe('advanceSubstep', () => {
     expect(next.phase).toBe('stage-clear')
   })
 
-  it('completes game after stage 5', () => {
+  it('triggers round-clear after stage 5', () => {
     const state = makeState({ stage: MAX_STAGE, substep: 1 })
     const next = advanceSubstep(state)
-    expect(next.phase).toBe('success')
+    expect(next.phase).toBe('round-clear')
   })
 })
 
 // ── advanceStage ──
 
 describe('advanceStage', () => {
-  it('does nothing if phase is not stage-clear', () => {
+  it('does nothing if phase is not stage-clear or round-clear', () => {
     const state = makeState({ phase: 'toss' })
     expect(advanceStage(state)).toBe(state)
   })
@@ -311,6 +418,12 @@ describe('advanceStage', () => {
     next.stones.forEach((s) => expect(s.status).toBe('floor'))
   })
 
+  it('resets all stones z to 0', () => {
+    const state = makeState({ stage: 1, phase: 'stage-clear' })
+    const next = advanceStage(state)
+    next.stones.forEach((s) => expect(s.z).toBe(0))
+  })
+
   it('clears triggered chaos ids', () => {
     const state = makeState({
       stage: 1,
@@ -319,6 +432,61 @@ describe('advanceStage', () => {
     })
     const next = advanceStage(state)
     expect(next.triggeredChaosIds).toEqual([])
+  })
+})
+
+// ── Round Loop ──
+
+describe('round loop', () => {
+  it('checkStageComplete returns round-clear when stage >= MAX_STAGE', () => {
+    const state = makeState({ stage: MAX_STAGE })
+    const next = checkStageComplete(state)
+    expect(next.phase).toBe('round-clear')
+  })
+
+  it('checkStageComplete returns stage-clear when stage < MAX_STAGE', () => {
+    const state = makeState({ stage: 3 })
+    const next = checkStageComplete(state)
+    expect(next.phase).toBe('stage-clear')
+  })
+
+  it('advanceStage from round-clear resets to stage 1 and increments round', () => {
+    const state = makeState({ stage: MAX_STAGE, round: 1, phase: 'round-clear' })
+    const next = advanceStage(state)
+    expect(next.stage).toBe(1)
+    expect(next.round).toBe(2)
+    expect(next.substep).toBe(0)
+    expect(next.phase).toBe('scatter')
+    next.stones.forEach((s) => {
+      expect(s.status).toBe('floor')
+      expect(s.z).toBe(0)
+    })
+  })
+
+  it('advanceStage from round-clear resets isFlipped to false', () => {
+    const state = makeState({ stage: MAX_STAGE, round: 1, phase: 'round-clear', isFlipped: true })
+    const next = advanceStage(state)
+    expect(next.isFlipped).toBe(false)
+  })
+
+  it('supports continuous round progression R1 → R2 → R3', () => {
+    // R1 round-clear
+    let state = makeState({ stage: MAX_STAGE, round: 1, phase: 'round-clear' })
+    state = advanceStage(state)
+    expect(state.stage).toBe(1)
+    expect(state.round).toBe(2)
+
+    // Simulate R2 completion
+    state = { ...state, stage: MAX_STAGE, phase: 'round-clear' }
+    state = advanceStage(state)
+    expect(state.stage).toBe(1)
+    expect(state.round).toBe(3)
+
+    // Simulate R3 completion
+    state = { ...state, stage: MAX_STAGE, phase: 'round-clear' }
+    state = advanceStage(state)
+    expect(state.stage).toBe(1)
+    expect(state.round).toBe(4)
   })
 })
 
@@ -342,14 +510,17 @@ describe('retryStage', () => {
     expect(next.tossedStoneId).toBeNull()
   })
 
-  it('resets all stones to floor', () => {
+  it('resets all stones to floor with z=0', () => {
     const stones = createInitialState(SEED).stones.map((s) => ({
       ...s,
       status: 'hand' as const,
     }))
     const state = makeState({ stones, phase: 'failed' })
     const next = retryStage(state)
-    next.stones.forEach((s) => expect(s.status).toBe('floor'))
+    next.stones.forEach((s) => {
+      expect(s.status).toBe('floor')
+      expect(s.z).toBe(0)
+    })
   })
 })
 
@@ -436,13 +607,29 @@ describe('getAvailableStoneCount', () => {
 // ── Full game flow ──
 
 describe('full game flow — stage 1 completion', () => {
-  it('completes stage 1 through 4 substeps', () => {
+  it('completes stage 1 through 4 substeps (select→hold→toss→pick→catch, then toss→pick→catch)', () => {
     let state = createInitialState(SEED)
     state = scatterStones(state)
-    expect(state.phase).toBe('toss')
+    expect(state.phase).toBe('select')
 
     // 4 substeps for stage 1
     for (let sub = 0; sub < 4; sub++) {
+      if (sub === 0) {
+        // First substep: select → hold → toss
+        const floorStoneToToss = state.stones.find((s) => s.status === 'floor')!
+        const selected = selectStone(state, floorStoneToToss.id)
+        expect(selected).not.toBeNull()
+        state = selected!
+
+        const held = holdStone(state)
+        expect(held).not.toBeNull()
+        state = held!
+        expect(state.phase).toBe('hold')
+      } else {
+        // Subsequent substeps: hand stone exists → directly toss
+        expect(state.phase).toBe('toss')
+      }
+
       state = startToss(state)
       expect(state.phase).toBe('pick')
       const tossedId = state.tossedStoneId!
@@ -463,6 +650,7 @@ describe('full game flow — stage 1 completion', () => {
       state = catchStone(state, true)
 
       if (sub < 3) {
+        // After catch, tossed stone is now hand → next phase is toss
         expect(state.phase).toBe('toss')
         expect(state.substep).toBe(sub + 1)
       }
@@ -488,5 +676,56 @@ describe('immutability', () => {
     const next = startToss(state)
     expect(next).not.toBe(state)
     expect(next.stones).not.toBe(state.stones)
+  })
+})
+
+// ── Timing constants ──
+
+describe('getTossDuration', () => {
+  it('stage 1 = 2400ms', () => expect(getTossDuration(1)).toBe(2400))
+  it('stage 2 = 2200ms', () => expect(getTossDuration(2)).toBe(2200))
+  it('stage 3 = 2000ms', () => expect(getTossDuration(3)).toBe(2000))
+  it('stage 4 = 1800ms', () => expect(getTossDuration(4)).toBe(1800))
+  it('stage 5 = 2400ms', () => expect(getTossDuration(5)).toBe(2400))
+  it('invalid stage = 2400ms default', () => expect(getTossDuration(99)).toBe(2400))
+})
+
+describe('getCatchWindow', () => {
+  it('stage 1 = 500ms', () => expect(getCatchWindow(1)).toBe(500))
+  it('stage 4 = 300ms (hardest)', () => expect(getCatchWindow(4)).toBe(300))
+  it('stage 5 = 500ms', () => expect(getCatchWindow(5)).toBe(500))
+  it('invalid stage = 500ms default', () => expect(getCatchWindow(99)).toBe(500))
+})
+
+// ── catchStone with timing ──
+
+describe('catchStone with timing', () => {
+  it('early timing causes failure', () => {
+    const stones = createInitialState(SEED).stones.map((s, i) =>
+      i === 0 ? { ...s, status: 'air' as const } : s
+    )
+    const state = makeState({ phase: 'catch', stones })
+    const next = catchStone(state, false, 'early')
+    expect(next.phase).toBe('failed')
+    expect(next.failCount).toBe(1)
+  })
+
+  it('miss timing causes failure', () => {
+    const stones = createInitialState(SEED).stones.map((s, i) =>
+      i === 0 ? { ...s, status: 'air' as const } : s
+    )
+    const state = makeState({ phase: 'catch', stones })
+    const next = catchStone(state, false, 'miss')
+    expect(next.phase).toBe('failed')
+  })
+
+  it('perfect timing succeeds', () => {
+    const stones = createInitialState(SEED).stones.map((s, i) =>
+      i === 0 ? { ...s, status: 'air' as const } : s
+    )
+    const state = makeState({ phase: 'catch', stage: 1, substep: 0, stones })
+    const next = catchStone(state, true, 'perfect')
+    expect(next.phase).not.toBe('failed')
+    expect(next.stones[0].status).toBe('hand')
   })
 })

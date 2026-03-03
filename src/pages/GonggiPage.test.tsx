@@ -25,38 +25,6 @@ vi.mock('@/lib/gonggi-leaderboard', () => ({
   saveGonggiScore: vi.fn().mockResolvedValue(true),
 }))
 
-// Mock matter-js for GonggiBoard
-vi.mock('matter-js', () => {
-  const mockBody = {
-    position: { x: 100, y: 200 },
-    angle: 0,
-    velocity: { x: 0, y: 0 },
-  }
-  return {
-    default: {
-      Engine: {
-        create: () => ({ world: { bodies: [] } }),
-        update: vi.fn(),
-        clear: vi.fn(),
-      },
-      World: {
-        add: vi.fn(),
-        clear: vi.fn(),
-      },
-      Bodies: {
-        rectangle: () => ({ ...mockBody, isStatic: true }),
-        circle: () => ({ ...mockBody }),
-      },
-      Body: {
-        setVelocity: vi.fn(),
-        applyForce: vi.fn(),
-        setPosition: vi.fn(),
-        setStatic: vi.fn(),
-      },
-    },
-  }
-})
-
 // Mock framer-motion
 vi.mock('framer-motion', () => ({
   motion: {
@@ -136,7 +104,7 @@ describe('GonggiPage lobby → playing transition', () => {
     expect(screen.queryByText('게임 규칙')).not.toBeInTheDocument()
     // 보드 UI 요소 확인
     expect(screen.getByText(/일단/)).toBeInTheDocument()
-    expect(screen.getByText(/던지세요/)).toBeInTheDocument()
+    expect(screen.getByText(/골라주세요/)).toBeInTheDocument()
   })
 })
 
@@ -154,6 +122,7 @@ describe('GonggiPage playing', () => {
     await startGame()
     expect(screen.getByText(/일단/)).toBeInTheDocument()
     expect(screen.getByText('00:00')).toBeInTheDocument()
+    expect(screen.getByText(/골라주세요/)).toBeInTheDocument()
   })
 
   test('게임 보드에 상태바가 표시된다 (라운드/실패/변칙)', async () => {
@@ -191,9 +160,8 @@ describe('GonggiPage playing', () => {
     expect(screen.queryByText('일시정지')).not.toBeInTheDocument()
   })
 
-  test('던지기 버튼 클릭 후 스와이프 안내로 전환된다', async () => {
-    const user = await startGame()
-    await user.click(screen.getByText(/던지기/))
-    expect(screen.getByText(/스와이프하세요/)).toBeInTheDocument()
+  test('시작 시 돌 선택 안내가 표시된다', async () => {
+    await startGame()
+    expect(screen.getByText(/골라주세요/)).toBeInTheDocument()
   })
 })

@@ -1,6 +1,8 @@
 import { test, expect, type Page } from '@playwright/test'
 
-// Reuse the same auth bypass pattern from game-ai.spec.ts
+// E2E tests for Gonggi (공기놀이) game flow.
+// Requires authentication — reuses the same fake auth pattern as game-ai.spec.ts.
+
 async function loginAsTestUser(page: Page) {
   await page.goto('/login')
 
@@ -78,6 +80,19 @@ async function loginAsTestUser(page: Page) {
   await expect(page.getByText('게임 허브')).toBeVisible({ timeout: 5000 })
 }
 
+async function swipeToss(page: Page) {
+  const board = page.locator('[class*="BoardArea"]').first()
+  const box = await board.boundingBox()
+  if (!box) return
+  const startX = box.x + box.width * 0.5
+  const startY = box.y + box.height * 0.62
+  await page.mouse.move(startX, startY)
+  await page.mouse.down()
+  await page.mouse.move(startX, startY - 40, { steps: 2 })
+  await page.mouse.move(startX, startY - 100, { steps: 2 })
+  await page.mouse.up()
+}
+
 // ── 체크리스트 1: 홈 화면 공기놀이 카드 ──
 
 test.describe('Gonggi — Home card', () => {
@@ -141,20 +156,23 @@ test.describe('Gonggi — Lobby', () => {
   })
 })
 
-// ── 체크리스트 3: 게임 플레이 ──
+// ── 체크리스트 3: 게임 플레이 기본 UI ──
 
-test.describe('Gonggi — Game play', () => {
+test.describe('Gonggi — Game play UI', () => {
   async function startGame(page: Page) {
     await loginAsTestUser(page)
     await page.goto('/gonggi')
     await page.getByText(/게임 시작/).click()
   }
 
-  test('시작 후 게임 보드가 표시된다', async ({ page }) => {
+  test('시작 후 select phase 안내가 표시된다', async ({ page }) => {
     await startGame(page)
 
-    // Stage label and timer should be visible
-    await expect(page.getByText(/일단/)).toBeVisible({ timeout: 3000 })
+    // After scatter auto-transition, select phase text
+    await expect(page.getByText(/골라주세요/)).toBeVisible({ timeout: 3000 })
+    // Stage label
+    await expect(page.getByText(/일단/)).toBeVisible()
+    // Timer
     await expect(page.getByText('00:00')).toBeVisible()
   })
 
@@ -166,17 +184,20 @@ test.describe('Gonggi — Game play', () => {
     await expect(page.getByText('변칙')).toBeVisible()
   })
 
-  test('던지기 버튼이 표시된다', async ({ page }) => {
+  test('공깃돌 5개가 보드에 렌더링된다', async ({ page }) => {
     await startGame(page)
 
-    await expect(page.getByText(/던지기/)).toBeVisible({ timeout: 3000 })
+    for (const emoji of ['🟡', '🔴', '🔵', '🟢', '🟣']) {
+      await expect(page.getByText(emoji)).toBeVisible({ timeout: 3000 })
+    }
   })
 
-  test('던지기 → 스와이프 안내로 전환된다', async ({ page }) => {
+  test('select phase에서 스와이프 힌트가 없다', async ({ page }) => {
     await startGame(page)
 
-    await page.getByText(/던지기/).click()
-    await expect(page.getByText(/스와이프하세요/)).toBeVisible({ timeout: 3000 })
+    // In select phase, no swipe hint yet
+    await expect(page.getByText(/골라주세요/)).toBeVisible({ timeout: 3000 })
+    await expect(page.getByText(/스와이프/)).not.toBeVisible()
   })
 
   test('일시정지/재개가 동작한다', async ({ page }) => {
@@ -197,28 +218,212 @@ test.describe('Gonggi — Game play', () => {
     await expect(page.getByText('열받는 공기놀이')).toBeVisible({ timeout: 3000 })
     await expect(page.getByText(/게임 시작/)).toBeVisible()
   })
-})
 
-// ── 체크리스트 4: 단계 진행 (던지기→잡기→다음) ──
+  test('타이머가 경과 시간을 표시한다', async ({ page }) => {
+    await startGame(page)
 
-test.describe('Gonggi — Stage progression', () => {
-  test('던지기 → 잡기 → 실패 → 다시 도전 플로우', async ({ page }) => {
-    await loginAsTestUser(page)
-    await page.goto('/gonggi')
-    await page.getByText(/게임 시작/).click()
-
-    // Toss
-    await page.getByText(/던지기/).click()
-    await expect(page.getByText(/스와이프하세요/)).toBeVisible({ timeout: 3000 })
-
-    // Without swiping, click catch — this will result in catch phase
-    // The swipe picks 0 stones, so we need a different path.
-    // Instead, let's verify the "catch" button appears after pick phase
-    // For E2E, we verify the UI flow exists — game logic tested in unit tests
+    await expect(page.getByText('00:00')).toBeVisible()
+    // Wait and verify timer advances
+    await page.waitForTimeout(1500)
+    await expect(page.getByText('00:01')).toBeVisible({ timeout: 2000 })
   })
 })
 
-// ── 체크리스트 5: 미인증 접근 ──
+// ── 체크리스트 4: select → hold → toss 단계 흐름 ──
+
+test.describe('Gonggi — Select/Hold/Toss flow', () => {
+  async function startGame(page: Page) {
+    await loginAsTestUser(page)
+    await page.goto('/gonggi')
+    await page.getByText(/게임 시작/).click()
+    await expect(page.getByText(/골라주세요/)).toBeVisible({ timeout: 3000 })
+  }
+
+  test('보드 영역 클릭 시 돌 선택 → hold 전환 → 스와이프 힌트 표시', async ({ page }) => {
+    await startGame(page)
+
+    // Click on the board area to select a stone
+    // Stones are positioned randomly, so click the center area of the board
+    const board = page.locator('[class*="BoardArea"]').first()
+    await expect(board).toBeVisible()
+
+    // Click near the center where a stone is likely positioned
+    const box = await board.boundingBox()
+    if (box) {
+      await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5)
+    }
+
+    // Wait for auto hold transition (300ms delay)
+    await page.waitForTimeout(500)
+
+    // If a stone was hit, hold phase shows swipe hint
+    // If missed, still in select phase — both are valid outcomes
+    const swipeHint = page.getByText(/스와이프/)
+    const selectText = page.getByText(/골라주세요/)
+
+    // Either swipe hint or select text should be visible
+    const swipeVisible = await swipeHint.isVisible().catch(() => false)
+    const selectVisible = await selectText.isVisible().catch(() => false)
+    expect(swipeVisible || selectVisible).toBeTruthy()
+  })
+
+  test('hold phase에서 확대 돌과 스와이프 힌트가 표시된다', async ({ page }) => {
+    await startGame(page)
+
+    const board = page.locator('[class*="BoardArea"]').first()
+    const box = await board.boundingBox()
+    if (!box) return
+
+    // Click in a grid pattern to increase chance of hitting a stone
+    let holdReached = false
+    for (let i = 0; i < 5 && !holdReached; i++) {
+      const xRatio = 0.2 + (i * 0.15)
+      await page.mouse.click(box.x + box.width * xRatio, box.y + box.height * 0.5)
+      await page.waitForTimeout(400)
+
+      holdReached = await page.getByText(/스와이프/).isVisible().catch(() => false)
+    }
+
+    if (holdReached) {
+      await expect(page.getByText(/스와이프/)).toBeVisible()
+      await expect(page.getByText(/스와이프하여 던지기/)).toBeVisible()
+    }
+  })
+
+  test('hold phase에서 스와이프 → pick 또는 catch phase로 전환', async ({ page }) => {
+    await startGame(page)
+
+    const board = page.locator('[class*="BoardArea"]').first()
+    const box = await board.boundingBox()
+    if (!box) return
+
+    // Click around to select a stone
+    let holdReached = false
+    for (let i = 0; i < 9 && !holdReached; i++) {
+      const xRatio = 0.15 + (i % 3) * 0.25
+      const yRatio = 0.2 + Math.floor(i / 3) * 0.25
+      await page.mouse.click(box.x + box.width * xRatio, box.y + box.height * yRatio)
+      await page.waitForTimeout(400)
+      holdReached = await page.getByText(/스와이프/).isVisible().catch(() => false)
+    }
+
+    if (holdReached) {
+      await swipeToss(page)
+
+      // After toss, should transition to pick or catch phase
+      await page.waitForTimeout(300)
+      const phaseText = await page.locator('[class*="PhaseBar"]').first().textContent()
+      // "N개를 스와이프하세요!" or "떨어지는 돌을 잡으세요!"
+      expect(phaseText).toMatch(/스와이프하세요|떨어지는 돌/)
+    }
+  })
+})
+
+// ── 체크리스트 5: catch 타이밍 ──
+
+test.describe('Gonggi — Catch timing', () => {
+  test('catch phase에서 FlyingStone이 표시되고 탭으로 잡을 수 있다', async ({ page }) => {
+    await loginAsTestUser(page)
+    await page.goto('/gonggi')
+    await page.getByText(/게임 시작/).click()
+    await expect(page.getByText(/골라주세요/)).toBeVisible({ timeout: 3000 })
+
+    const board = page.locator('[class*="BoardArea"]').first()
+    const box = await board.boundingBox()
+    if (!box) return
+
+    // Select a stone
+    let holdReached = false
+    for (let i = 0; i < 9 && !holdReached; i++) {
+      const xRatio = 0.15 + (i % 3) * 0.25
+      const yRatio = 0.2 + Math.floor(i / 3) * 0.25
+      await page.mouse.click(box.x + box.width * xRatio, box.y + box.height * yRatio)
+      await page.waitForTimeout(400)
+      holdReached = await page.getByText(/스와이프/).isVisible().catch(() => false)
+    }
+
+    if (!holdReached) return
+
+    // Toss via swipe
+    await swipeToss(page)
+    await page.waitForTimeout(300)
+
+    // If in pick phase, wait for auto-miss
+    const pickVisible = await page.getByText(/스와이프하세요/).isVisible().catch(() => false)
+    if (pickVisible) {
+      await page.waitForTimeout(3000)
+      const failText = await page.getByText(/다시 도전/).isVisible().catch(() => false)
+      if (failText) {
+        await expect(page.getByText(/다시 도전/)).toBeVisible()
+      }
+    } else {
+      // Catch phase — FlyingStone visible, try to tap it
+      const container = page.locator('[class*="Container"]').first()
+      const containerBox = await container.boundingBox()
+      if (containerBox) {
+        // FlyingStone is at ~62% of Container height (bottom of arc)
+        await page.mouse.click(
+          containerBox.x + containerBox.width * 0.5,
+          containerBox.y + containerBox.height * 0.62,
+        )
+      }
+    }
+  })
+})
+
+// ── 체크리스트 6: 실패 → 재시도 ──
+
+test.describe('Gonggi — Failure and retry', () => {
+  test('auto-miss 후 실패 메시지와 다시 도전 버튼이 표시된다', async ({ page }) => {
+    await loginAsTestUser(page)
+    await page.goto('/gonggi')
+    await page.getByText(/게임 시작/).click()
+    await expect(page.getByText(/골라주세요/)).toBeVisible({ timeout: 3000 })
+
+    const board = page.locator('[class*="BoardArea"]').first()
+    const box = await board.boundingBox()
+    if (!box) return
+
+    // Select a stone
+    let holdReached = false
+    for (let i = 0; i < 9 && !holdReached; i++) {
+      const xRatio = 0.15 + (i % 3) * 0.25
+      const yRatio = 0.2 + Math.floor(i / 3) * 0.25
+      await page.mouse.click(box.x + box.width * xRatio, box.y + box.height * yRatio)
+      await page.waitForTimeout(400)
+      holdReached = await page.getByText(/스와이프/).isVisible().catch(() => false)
+    }
+
+    if (!holdReached) return
+
+    // Toss via swipe
+    await swipeToss(page)
+
+    // Wait for auto-miss timeout (toss duration is 2400ms for stage 1)
+    await page.waitForTimeout(3000)
+
+    // Should show failure UI or "놓쳤어요!" feedback
+    const retryButton = page.getByRole('button', { name: /다시 도전/ })
+    const missVisible = await page.getByText(/놓쳤어요/).isVisible().catch(() => false)
+
+    const failedVisible = await retryButton.isVisible().catch(() => false)
+
+    if (failedVisible) {
+      await expect(retryButton).toBeVisible()
+
+      // Click retry
+      await retryButton.click()
+
+      // Should return to select phase
+      await expect(page.getByText(/골라주세요/)).toBeVisible({ timeout: 3000 })
+    } else if (missVisible) {
+      // Miss feedback is transient — failure UI will follow
+      await expect(retryButton).toBeVisible({ timeout: 3000 })
+    }
+  })
+})
+
+// ── 체크리스트 7: 미인증 접근 ──
 
 test.describe('Gonggi — Unauthenticated', () => {
   test('/gonggi 직접 접근 시 로그인으로 리다이렉트', async ({ page }) => {

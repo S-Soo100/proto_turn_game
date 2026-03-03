@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react'
 import styled from '@emotion/styled'
 import { motion, AnimatePresence } from 'framer-motion'
-import type { StonePosition } from '@/lib/physics/gonggi-physics'
+
+interface StonePos {
+  id: number
+  x: number // % of board
+  y: number // % of board
+}
 
 interface Props {
-  stonePositions: StonePosition[]
+  stones: StonePos[]
   affectedStoneIds: number[]
   onComplete: () => void
 }
 
-export default function StoneEyesEffect({ stonePositions, affectedStoneIds, onComplete }: Props) {
+export default function StoneEyesEffect({ stones, affectedStoneIds, onComplete }: Props) {
   const [showExclamation, setShowExclamation] = useState(false)
 
   useEffect(() => {
@@ -25,12 +30,12 @@ export default function StoneEyesEffect({ stonePositions, affectedStoneIds, onCo
     <Container>
       <AnimatePresence>
         {affectedStoneIds.map((id) => {
-          const pos = stonePositions.find((p) => p.id === id)
-          if (!pos) return null
+          const stone = stones.find((s) => s.id === id)
+          if (!stone) return null
           return (
             <EyesWrapper
               key={id}
-              style={{ left: pos.x, top: pos.y - 20 }}
+              style={{ left: `${stone.x}%`, top: `calc(${stone.y}% - 20px)` }}
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ duration: 0.2, delay: id * 0.05 }}

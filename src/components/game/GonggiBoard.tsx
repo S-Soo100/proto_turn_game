@@ -6,6 +6,8 @@ import type { GonggiState, GonggiResult } from '@/lib/game-logic/gonggi'
 import {
   createInitialState,
   scatterStones,
+  selectStone,
+  holdStone,
   startToss,
   completeToss,
   pickStones,
@@ -17,8 +19,8 @@ import {
   getResult,
   getRequiredPickCount,
   getSubstepCount,
+  getTossDuration,
   mulberry32,
-  STONE_COUNT,
 } from '@/lib/game-logic/gonggi'
 import {
   checkChaos,
@@ -33,23 +35,12 @@ import { fakeClearRule } from '@/lib/game-logic/chaos-rules/fake-clear'
 import { splitRule } from '@/lib/game-logic/chaos-rules/split'
 import { danmakuRule } from '@/lib/game-logic/chaos-rules/danmaku'
 import { screenFlipRule } from '@/lib/game-logic/chaos-rules/screen-flip'
-import {
-  createPhysicsWorld,
-  updatePhysics,
-  getStonePositions,
-  applyTossForce,
-  applyScatterForce,
-  applyCatSwipeForce,
-  destroyPhysicsWorld,
-  setStonePosition,
-  type PhysicsWorld,
-  type StonePosition,
-} from '@/lib/physics/gonggi-physics'
+import { constellationRule } from '@/lib/game-logic/chaos-rules/constellation'
+import ConstellationEffect from './chaos/ConstellationEffect'
+import { getStoneStyle } from '@/lib/gonggi-z-axis'
 
 // ── Constants ──
 
-const BOARD_WIDTH = 360
-const BOARD_HEIGHT = 400
 const ALL_CHAOS_RULES: ChaosRule[] = [
   birdTransformRule,
   catSwipeRule,
@@ -58,10 +49,14 @@ const ALL_CHAOS_RULES: ChaosRule[] = [
   splitRule,
   danmakuRule,
   screenFlipRule,
+  constellationRule,
 ]
 
 const STONE_EMOJIS = ['🟡', '🔴', '🔵', '🟢', '🟣']
 const STAGE_NAMES = ['', '일단', '이단', '삼단', '사단', '꺾기']
+const PICK_RADIUS = 10 // % of board
+const HOLD_STONE_REST_TOP_PCT = 62  // bottom-center of board (%)
+const TOSS_VELOCITY_THRESHOLD = -0.5  // px/ms (negative = upward)
 
 // ── Props ──
 
@@ -74,73 +69,64 @@ interface Props {
 
 export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   const [gameState, setGameState] = useState<GonggiState>(() => createInitialState())
-  const [stonePositions, setStonePositions] = useState<StonePosition[]>([])
   const [chaosEffect, setChaosEffect] = useState<ChaosResult | null>(null)
-  const [swipePath, setSwipePath] = useState<{ x: number; y: number }[]>([])
   const [selectedStoneIds, setSelectedStoneIds] = useState<Set<number>>(new Set())
   const [message, setMessage] = useState<string>('')
   const [danmakuComments, setDanmakuComments] = useState<{ text: string; yPercent: number; id: number }[]>([])
   const [isPaused, setIsPaused] = useState(false)
+  const [swipePath, setSwipePath] = useState<{ x: number; y: number }[]>([])
+  const [tossAnimating, setTossAnimating] = useState(false)
+  const [catchMessage, setCatchMessage] = useState<string>('')
+  const [pickTimerProgress, setPickTimerProgress] = useState(1) // 1=full, 0=empty
+  const [holdDragY, setHoldDragY] = useState(0)
+  const [isDraggingHold, setIsDraggingHold] = useState(false)
 
-  const physicsRef = useRef<PhysicsWorld | null>(null)
   const gameStateRef = useRef(gameState)
-  const rafRef = useRef(0)
   const startTimeRef = useRef(0)
   const pausedAtRef = useRef(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const boardRef = useRef<HTMLDivElement>(null)
   const isSwipingRef = useRef(false)
   const chaosTimeoutRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const rngRef = useRef(() => Math.random())
   const danmakuIdRef = useRef(0)
+  const tossTimerRef = useRef<ReturnType<typeof setTimeout>[]>([])
+  const pickTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const holdDragStartRef = useRef<{ y: number; time: number } | null>(null)
+  const lastDragPointsRef = useRef<{ y: number; time: number }[]>([])
 
   gameStateRef.current = gameState
 
-  // ── Initialize physics ──
+  // ── Initialize ──
   useEffect(() => {
-    const world = createPhysicsWorld(BOARD_WIDTH, BOARD_HEIGHT, STONE_COUNT)
-    physicsRef.current = world
-
-    // Position stones from initial state
-    const state = gameStateRef.current
-    state.stones.forEach((s, i) => {
-      setStonePosition(world, i, (s.x / 100) * BOARD_WIDTH, (s.y / 100) * BOARD_HEIGHT)
-    })
-
-    rngRef.current = mulberry32(state.seed + Date.now())
+    rngRef.current = mulberry32(gameStateRef.current.seed + Date.now())
 
     return () => {
-      cancelAnimationFrame(rafRef.current)
+      if (timerRef.current) clearInterval(timerRef.current)
       chaosTimeoutRef.current.forEach(clearTimeout)
-      if (physicsRef.current) {
-        destroyPhysicsWorld(physicsRef.current)
-      }
+      tossTimerRef.current.forEach(clearTimeout)
+      if (pickTimerRef.current) clearInterval(pickTimerRef.current)
     }
   }, [])
 
-  // ── Game loop ──
+  // ── Elapsed timer (replaces RAF game loop) ──
   useEffect(() => {
     if (isPaused) return
     if (gameState.phase === 'success' || (!startTimeRef.current && gameState.phase === 'scatter')) {
       return
     }
 
-    const tick = () => {
-      if (!physicsRef.current) return
-      updatePhysics(physicsRef.current)
-      const positions = getStonePositions(physicsRef.current)
-      setStonePositions(positions)
-
-      // Update elapsed
+    timerRef.current = setInterval(() => {
       if (startTimeRef.current > 0) {
         const elapsed = performance.now() - startTimeRef.current
         gameStateRef.current = { ...gameStateRef.current, elapsedMs: Math.round(elapsed) }
+        setGameState((prev) => ({ ...prev, elapsedMs: Math.round(elapsed) }))
       }
+    }, 200)
 
-      rafRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
     }
-
-    rafRef.current = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(rafRef.current)
   }, [gameState.phase, isPaused])
 
   // ── Auto-scatter on phase changes ──
@@ -167,43 +153,47 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     setGameState(newState)
     gameStateRef.current = newState
 
-    if (physicsRef.current) {
-      newState.stones.forEach((s, i) => {
-        setStonePosition(
-          physicsRef.current!,
-          i,
-          (s.x / 100) * BOARD_WIDTH,
-          (s.y / 100) * BOARD_HEIGHT,
-        )
-      })
-      applyScatterForce(physicsRef.current, rngRef.current)
-    }
-
     if (!startTimeRef.current) {
       startTimeRef.current = performance.now()
     }
   }, [])
 
+  const handleSelectStone = useCallback((stoneId: number) => {
+    const state = gameStateRef.current
+    if (state.phase !== 'select') return
+
+    const selected = selectStone(state, stoneId)
+    if (!selected) return
+    setGameState(selected)
+    gameStateRef.current = selected
+
+    // Auto-transition to hold after short delay
+    setTimeout(() => {
+      const current = gameStateRef.current
+      if (current.phase !== 'select' || current.selectedStoneId !== stoneId) return
+      const held = holdStone(current)
+      if (held) {
+        setGameState(held)
+        gameStateRef.current = held
+      }
+    }, 300)
+  }, [])
+
+  const clearTossTimers = useCallback(() => {
+    tossTimerRef.current.forEach(clearTimeout)
+    tossTimerRef.current = []
+    setTossAnimating(false)
+    setCatchMessage('')
+  }, [])
+
   const handleToss = useCallback(() => {
     let state = gameStateRef.current
-    if (state.phase !== 'toss') return
+    if (state.phase !== 'toss' && state.phase !== 'hold') return
 
     state = startToss(state)
     state = completeToss(state)
     setGameState(state)
     gameStateRef.current = state
-
-    // Apply toss force to physics
-    if (physicsRef.current && state.tossedStoneId !== null) {
-      if (state.tossedStoneId === -1) {
-        // Stage 5: toss all
-        for (let i = 0; i < STONE_COUNT; i++) {
-          applyTossForce(physicsRef.current, i, (rngRef.current() - 0.5) * 2, -8)
-        }
-      } else {
-        applyTossForce(physicsRef.current, state.tossedStoneId, 0, -10)
-      }
-    }
 
     // Check chaos after toss
     const chaos = checkChaos(state, 'after-toss', ALL_CHAOS_RULES, rngRef.current)
@@ -212,11 +202,19 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
       return
     }
 
-    // For stage 5 or when pick phase starts, check before-pick chaos
+    // Start toss arc animation for catch phase (stage 5: all tossed → catch)
+    if (state.phase === 'catch') {
+      startTossAnimation(state)
+    }
+
+    // For when pick phase starts, check before-pick chaos + start pick timer
     if (state.phase === 'pick') {
       const pickChaos = checkChaos(state, 'before-pick', ALL_CHAOS_RULES, rngRef.current)
       if (pickChaos) {
         handleChaosEffect(state, pickChaos.result, pickChaos.rule)
+      } else {
+        startPickTimer(state)
+        startTossAnimation(state)
       }
     }
 
@@ -227,9 +225,91 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     }
   }, [])
 
+  const handleHoldDragStart = useCallback((e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    holdDragStartRef.current = { y: e.clientY, time: performance.now() }
+    lastDragPointsRef.current = [{ y: e.clientY, time: performance.now() }]
+    setIsDraggingHold(true)
+  }, [])
+
+  const handleHoldDragMove = useCallback((e: React.PointerEvent) => {
+    if (!holdDragStartRef.current) return
+    const dy = e.clientY - holdDragStartRef.current.y
+    setHoldDragY(Math.max(-120, Math.min(40, dy)))
+
+    const now = performance.now()
+    lastDragPointsRef.current.push({ y: e.clientY, time: now })
+    lastDragPointsRef.current = lastDragPointsRef.current.filter(p => now - p.time < 80)
+  }, [])
+
+  const handleHoldDragEnd = useCallback(() => {
+    if (!holdDragStartRef.current) return
+
+    const points = lastDragPointsRef.current
+    let velocity = 0
+    if (points.length >= 2) {
+      const first = points[0]
+      const last = points[points.length - 1]
+      const dt = last.time - first.time
+      if (dt > 0) velocity = (last.y - first.y) / dt
+    }
+
+    holdDragStartRef.current = null
+    lastDragPointsRef.current = []
+    setIsDraggingHold(false)
+    setHoldDragY(0)
+
+    if (velocity < TOSS_VELOCITY_THRESHOLD) {
+      handleToss()
+    }
+  }, [handleToss])
+
+  const startTossAnimation = useCallback((state: GonggiState) => {
+    const duration = getTossDuration(state.stage)
+
+    setTossAnimating(true)
+    setCatchMessage('')
+
+    // Auto-miss if player doesn't catch in time
+    const autoMiss = setTimeout(() => {
+      const current = gameStateRef.current
+      if (current.phase === 'catch' || current.phase === 'pick') {
+        setTossAnimating(false)
+        setCatchMessage('놓쳤어요!')
+        const missState = catchStone(current.phase === 'pick'
+          ? { ...current, phase: 'catch' as const }
+          : current, false, 'miss')
+        setGameState(missState)
+        gameStateRef.current = missState
+        setTimeout(() => setCatchMessage(''), 1500)
+      }
+    }, duration)
+    tossTimerRef.current.push(autoMiss)
+  }, [])
+
+  const startPickTimer = useCallback((state: GonggiState) => {
+    const duration = getTossDuration(state.stage)
+    const startTime = performance.now()
+    setPickTimerProgress(1)
+
+    if (pickTimerRef.current) clearInterval(pickTimerRef.current)
+    pickTimerRef.current = setInterval(() => {
+      const elapsed = performance.now() - startTime
+      const progress = Math.max(0, 1 - elapsed / duration)
+      setPickTimerProgress(progress)
+      if (progress <= 0) {
+        if (pickTimerRef.current) clearInterval(pickTimerRef.current)
+      }
+    }, 50)
+  }, [])
+
   const handleCatch = useCallback(() => {
     const state = gameStateRef.current
     if (state.phase !== 'catch') return
+
+    // Catch is always allowed during catch phase (no early penalty)
+    clearTossTimers()
+    if (pickTimerRef.current) clearInterval(pickTimerRef.current)
 
     // Check before-success chaos
     const chaos = checkChaos(state, 'before-success', ALL_CHAOS_RULES, rngRef.current)
@@ -238,7 +318,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
       return
     }
 
-    const newState = catchStone(state, true)
+    const newState = catchStone(state, true, 'perfect')
     setGameState(newState)
     gameStateRef.current = newState
 
@@ -254,16 +334,60 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
 
   const handleSwipeStart = useCallback((e: React.PointerEvent) => {
     const state = gameStateRef.current
-    if (state.phase !== 'pick') return
-
-    isSwipingRef.current = true
     const rect = boardRef.current?.getBoundingClientRect()
     if (!rect) return
 
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-    setSwipePath([{ x, y }])
+    const xPct = ((e.clientX - rect.left) / rect.width) * 100
+    const yPct = ((e.clientY - rect.top) / rect.height) * 100
+
+    // Select phase: tap to select a stone
+    if (state.phase === 'select') {
+      const hitStone = state.stones.find((stone) => {
+        if (stone.status !== 'floor') return false
+        const dx = stone.x - xPct
+        const dy = stone.y - yPct
+        return Math.sqrt(dx * dx + dy * dy) < PICK_RADIUS
+      })
+      if (hitStone) {
+        handleSelectStone(hitStone.id)
+      }
+      return
+    }
+
+    // Hold phase: tap a different stone to change selection
+    if (state.phase === 'hold') {
+      const hitStone = state.stones.find((stone) => {
+        if (stone.status !== 'floor') return false
+        const dx = stone.x - xPct
+        const dy = stone.y - yPct
+        return Math.sqrt(dx * dx + dy * dy) < PICK_RADIUS
+      })
+      if (hitStone) {
+        // Reset to select, then select the new stone
+        const resetState: typeof state = {
+          ...state,
+          phase: 'select',
+          selectedStoneId: null,
+          stones: state.stones.map((s) =>
+            s.id === state.selectedStoneId
+              ? { ...s, status: 'floor' as const, z: 0 }
+              : s
+          ),
+        }
+        setGameState(resetState)
+        gameStateRef.current = resetState
+        setTimeout(() => handleSelectStone(hitStone.id), 50)
+      }
+      return
+    }
+
+    // Pick phase: swipe to pick stones
+    if (state.phase !== 'pick') return
+
+    isSwipingRef.current = true
+    setSwipePath([{ x: xPct, y: yPct }])
     setSelectedStoneIds(new Set())
+    checkStoneHit(xPct, yPct, state)
   }, [])
 
   const handleSwipeMove = useCallback((e: React.PointerEvent) => {
@@ -271,25 +395,25 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     const rect = boardRef.current?.getBoundingClientRect()
     if (!rect) return
 
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-    setSwipePath((prev) => [...prev, { x, y }])
+    const xPct = ((e.clientX - rect.left) / rect.width) * 100
+    const yPct = ((e.clientY - rect.top) / rect.height) * 100
+    setSwipePath((prev) => [...prev, { x: xPct, y: yPct }])
 
-    // Check for stones near the swipe path
-    const positions = stonePositions
-    const PICK_RADIUS = 30
-    const state = gameStateRef.current
+    checkStoneHit(xPct, yPct, gameStateRef.current)
+  }, [])
 
-    positions.forEach((pos) => {
-      const stone = state.stones[pos.id]
-      if (stone && stone.status === 'floor') {
-        const dist = Math.sqrt((pos.x - x) ** 2 + (pos.y - y) ** 2)
+  const checkStoneHit = useCallback((xPct: number, yPct: number, state: GonggiState) => {
+    state.stones.forEach((stone) => {
+      if (stone.status === 'floor') {
+        const dx = stone.x - xPct
+        const dy = stone.y - yPct
+        const dist = Math.sqrt(dx * dx + dy * dy)
         if (dist < PICK_RADIUS) {
-          setSelectedStoneIds((prev) => new Set([...prev, pos.id]))
+          setSelectedStoneIds((prev) => new Set([...prev, stone.id]))
         }
       }
     })
-  }, [stonePositions])
+  }, [])
 
   const handleSwipeEnd = useCallback(() => {
     if (!isSwipingRef.current) return
@@ -305,12 +429,12 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     if (ids.length === required) {
       const newState = pickStones(state, ids)
       if (newState) {
+        if (pickTimerRef.current) clearInterval(pickTimerRef.current)
         setGameState(newState)
         gameStateRef.current = newState
         setSelectedStoneIds(new Set())
       }
     } else {
-      // Wrong count — show message
       showMessage(`${required}개를 골라야 해요! (${ids.length}개 선택됨)`)
       setSelectedStoneIds(new Set())
     }
@@ -318,23 +442,11 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
 
   const handleStageAdvance = useCallback(() => {
     const state = gameStateRef.current
-    if (state.phase !== 'stage-clear') return
+    if (state.phase !== 'stage-clear' && state.phase !== 'round-clear') return
 
     const newState = advanceStage(state)
     setGameState(newState)
     gameStateRef.current = newState
-
-    // Reposition physics stones
-    if (physicsRef.current) {
-      newState.stones.forEach((s, i) => {
-        setStonePosition(
-          physicsRef.current!,
-          i,
-          (s.x / 100) * BOARD_WIDTH,
-          (s.y / 100) * BOARD_HEIGHT,
-        )
-      })
-    }
   }, [])
 
   const handleRetry = useCallback(() => {
@@ -344,22 +456,11 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     const newState = retryStage(state)
     setGameState(newState)
     gameStateRef.current = newState
-
-    if (physicsRef.current) {
-      newState.stones.forEach((s, i) => {
-        setStonePosition(
-          physicsRef.current!,
-          i,
-          (s.x / 100) * BOARD_WIDTH,
-          (s.y / 100) * BOARD_HEIGHT,
-        )
-      })
-    }
   }, [])
 
   const handlePause = useCallback(() => {
     pausedAtRef.current = performance.now()
-    cancelAnimationFrame(rafRef.current)
+    if (timerRef.current) clearInterval(timerRef.current)
     setIsPaused(true)
   }, [])
 
@@ -375,10 +476,13 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
 
   const handleChaosEffect = useCallback(
     (state: GonggiState, result: ChaosResult, rule: ChaosRule) => {
+      // Pause toss animation during chaos
+      clearTossTimers()
+      if (pickTimerRef.current) clearInterval(pickTimerRef.current)
+
       setChaosEffect(result)
       const updatedState = applyChaosToState(state, result, rule.id)
 
-      // Process based on chaos type
       switch (result.type) {
         case 'stone-lost': {
           const stoneId = (result.data?.stoneId as number) ?? 0
@@ -392,10 +496,24 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
           break
         }
         case 'all-stones-scattered': {
-          if (physicsRef.current && result.data?.direction) {
-            applyCatSwipeForce(physicsRef.current, result.data.direction as 'left' | 'right' | 'top')
+          // Move stones in the direction via x,y coordinate shift
+          const direction = result.data?.direction as 'left' | 'right' | 'top'
+          const scattered = {
+            ...updatedState,
+            stones: updatedState.stones.map((s) => {
+              if (s.status === 'lost') return s
+              let newX = s.x
+              let newY = s.y
+              const offset = 30 + Math.random() * 20
+              switch (direction) {
+                case 'left': newX = Math.max(0, s.x - offset); break
+                case 'right': newX = Math.min(100, s.x + offset); break
+                case 'top': newY = Math.max(0, s.y - offset); break
+              }
+              return { ...s, x: newX, y: newY }
+            }),
           }
-          const afterScatter = failSubstep(updatedState)
+          const afterScatter = failSubstep(scattered)
           const tid = setTimeout(() => {
             setChaosEffect(null)
             setGameState(afterScatter)
@@ -418,18 +536,21 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
           setChaosEffect(null)
           setGameState(updatedState)
           gameStateRef.current = updatedState
-          // Flee forces are applied during pointer events
           break
         }
         case 'stone-split': {
           const tid = setTimeout(() => {
             setChaosEffect(null)
-            // For now, treat as failure (player didn't pick correctly in time)
             const afterFail = failSubstep(updatedState)
             setGameState(afterFail)
             gameStateRef.current = afterFail
           }, 3000)
           chaosTimeoutRef.current.push(tid)
+          break
+        }
+        case 'constellation': {
+          setGameState(updatedState)
+          gameStateRef.current = updatedState
           break
         }
         case 'screen-flip': {
@@ -476,6 +597,35 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     [],
   )
 
+  // ── Constellation callbacks ──
+
+  const handleConstellationWish = useCallback(
+    (choice: 'return' | 'more') => {
+      const state = gameStateRef.current
+      setChaosEffect(null)
+      if (choice === 'return') {
+        const after = failSubstep(state)
+        setGameState(after)
+        gameStateRef.current = after
+      } else {
+        const stoneId = (chaosEffect?.data?.stoneId as number) ?? 0
+        const after = loseStone(failSubstep(state), stoneId)
+        setGameState(after)
+        gameStateRef.current = after
+      }
+    },
+    [chaosEffect],
+  )
+
+  const handleConstellationTimeout = useCallback(() => {
+    const state = gameStateRef.current
+    setChaosEffect(null)
+    const stoneId = (chaosEffect?.data?.stoneId as number) ?? 0
+    const after = loseStone(failSubstep(state), stoneId)
+    setGameState(after)
+    gameStateRef.current = after
+  }, [chaosEffect])
+
   // ── Helpers ──
 
   const showMessage = useCallback((msg: string) => {
@@ -490,10 +640,13 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   const phaseText = (() => {
     switch (gameState.phase) {
       case 'scatter': return '준비...'
-      case 'toss': return '돌을 던지세요!'
+      case 'select': return '던질 돌을 골라주세요'
+      case 'hold': return '위로 스와이프하여 던지기!'
+      case 'toss': return '위로 스와이프하여 던지기!'
       case 'pick': return `${getRequiredPickCount(gameState.stage, gameState.substep)}개를 스와이프하세요!`
-      case 'catch': return '잡으세요!'
+      case 'catch': return '떨어지는 돌을 잡으세요!'
       case 'stage-clear': return `${STAGE_NAMES[gameState.stage]} 클리어!`
+      case 'round-clear': return `🎉 라운드 ${gameState.round} 클리어!`
       case 'failed': return '실패! 다시 도전'
       case 'success': return '🎉 전체 클리어!'
       default: return ''
@@ -525,24 +678,29 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
       <BoardArea ref={boardRef}>
         <PerspectiveContainer>
           <FloorSurface />
-          {stonePositions.map((pos, i) => {
-            const stone = gameState.stones[i]
-            if (!stone || stone.status === 'lost') return null
-            const isSelected = selectedStoneIds.has(i)
+          {gameState.stones.map((stone) => {
+            if (stone.status === 'lost') return null
+            // FlyingStone renders air/tossed stones at Container level
             const isAir = stone.status === 'air' || stone.status === 'tossed'
+            if (isAir && tossAnimating) return null
+            // HandArea renders hand stones during pick/catch/toss phases
+            if (stone.status === 'hand' && (gameState.phase === 'pick' || gameState.phase === 'catch' || gameState.phase === 'toss')) return null
+
+            const isSelected = selectedStoneIds.has(stone.id)
+            const zStyle = getStoneStyle(stone.z)
             return (
               <StoneVisual
-                key={i}
+                key={stone.id}
                 style={{
-                  left: `${pos.x}px`,
-                  top: `${pos.y}px`,
-                  transform: `translate(-50%, -50%) rotate(${pos.angle}rad) scale(${isAir ? 0.8 : 1})`,
+                  left: `${stone.x}%`,
+                  top: `${stone.y}%`,
+                  ...zStyle,
                   opacity: stone.status === 'hand' ? 0.5 : 1,
                   zIndex: isAir ? 10 : 1,
                 }}
                 $selected={isSelected}
               >
-                {STONE_EMOJIS[i % STONE_EMOJIS.length]}
+                {STONE_EMOJIS[stone.id % STONE_EMOJIS.length]}
               </StoneVisual>
             )
           })}
@@ -561,7 +719,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
             >
               <path
-                d={`M ${swipePath.map((p) => `${p.x},${p.y}`).join(' L ')}`}
+                d={`M ${swipePath.map((p) => `${p.x}%,${p.y}%`).join(' L ')}`}
                 stroke="rgba(255,255,255,0.5)"
                 strokeWidth="3"
                 fill="none"
@@ -571,30 +729,77 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
           )}
         </TouchOverlay>
 
-        {/* Action buttons */}
-        {gameState.phase === 'toss' && !isPaused && (
-          <ActionButton onClick={handleToss}>
-            <motion.div
-              animate={{ y: [0, -8, 0] }}
-              transition={{ repeat: Infinity, duration: 1 }}
-            >
-              🫴 던지기
-            </motion.div>
-          </ActionButton>
+        {/* Pick timer bar */}
+        {gameState.phase === 'pick' && tossAnimating && !isPaused && (
+          <PickTimerBar>
+            <PickTimerFill style={{ width: `${pickTimerProgress * 100}%` }} />
+          </PickTimerBar>
         )}
-        {gameState.phase === 'catch' && !isPaused && (
-          <ActionButton onClick={handleCatch}>
-            <motion.div
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ repeat: Infinity, duration: 0.6 }}
-            >
-              ✊ 잡기
-            </motion.div>
-          </ActionButton>
+
+        {/* Hold stone overlay — enlarged stone with swipe gesture */}
+        {((gameState.phase === 'hold' && gameState.selectedStoneId !== null) ||
+          gameState.phase === 'toss') && !isPaused && (
+          <HoldStoneOverlay
+            onPointerDown={handleHoldDragStart}
+            onPointerMove={handleHoldDragMove}
+            onPointerUp={handleHoldDragEnd}
+            onPointerCancel={handleHoldDragEnd}
+            style={{
+              top: `calc(${HOLD_STONE_REST_TOP_PCT}% + ${holdDragY}px)`,
+              transform: `translateX(-50%) rotate(${holdDragY * -0.15}deg)`,
+              transition: isDraggingHold
+                ? 'none'
+                : 'top 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            }}
+          >
+            {gameState.stage === 5 ? (
+              <HoldStoneGroup>
+                {gameState.stones.map((stone) => (
+                  <HoldStoneGroupItem key={stone.id}>
+                    {STONE_EMOJIS[stone.id % STONE_EMOJIS.length]}
+                  </HoldStoneGroupItem>
+                ))}
+              </HoldStoneGroup>
+            ) : (
+              <HoldStoneLarge>
+                {(() => {
+                  const stoneId = gameState.selectedStoneId
+                    ?? gameState.stones.find(s => s.status === 'hand')?.id
+                  return stoneId != null ? STONE_EMOJIS[stoneId % STONE_EMOJIS.length] : ''
+                })()}
+              </HoldStoneLarge>
+            )}
+            {!isDraggingHold && <SwipeHint>↑ 위로 스와이프</SwipeHint>}
+          </HoldStoneOverlay>
         )}
+        {/* Hand area — shows picked/collected stones (exclude toss candidate during toss phase) */}
+        {(() => {
+          const tossCandidateId = gameState.phase === 'toss'
+            ? (gameState.selectedStoneId ?? gameState.stones.find(s => s.status === 'hand')?.id ?? -1)
+            : -1
+          const handStones = gameState.stones.filter(s =>
+            s.status === 'hand' && s.id !== tossCandidateId
+          )
+          const showPhase = gameState.phase === 'pick' || gameState.phase === 'catch' || gameState.phase === 'toss'
+          if (handStones.length === 0 || !showPhase || isPaused) return null
+          return (
+            <HandArea>
+              <HandIcon>🤚</HandIcon>
+              {handStones.map(s => (
+                <HandStone key={s.id}>{STONE_EMOJIS[s.id % STONE_EMOJIS.length]}</HandStone>
+              ))}
+            </HandArea>
+          )
+        })()}
+
         {gameState.phase === 'stage-clear' && !isPaused && (
           <ActionButton onClick={handleStageAdvance}>
             다음 단계 →
+          </ActionButton>
+        )}
+        {gameState.phase === 'round-clear' && !isPaused && (
+          <ActionButton onClick={handleStageAdvance}>
+            라운드 {gameState.round + 1} 시작 →
           </ActionButton>
         )}
         {gameState.phase === 'failed' && !isPaused && (
@@ -603,6 +808,38 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
           </ActionButton>
         )}
       </BoardArea>
+
+      {/* FlyingStone — parabolic flight at Container level */}
+      {tossAnimating && !isPaused && (
+        <FlyingStone
+          className={gameState.phase === 'catch' ? 'catch-zone' : ''}
+          style={{
+            animationDuration: `${getTossDuration(gameState.stage)}ms`,
+            animationPlayState: isPaused ? 'paused' : 'running',
+            pointerEvents: gameState.phase === 'catch' ? 'auto' : 'none',
+          }}
+          onPointerDown={gameState.phase === 'catch' ? handleCatch : undefined}
+        >
+          {gameState.stage === 5 ? (
+            <FlyingStoneGroup>
+              {gameState.stones.filter(s => s.status === 'air' || s.status === 'tossed').map(s => (
+                <span key={s.id}>{STONE_EMOJIS[s.id % STONE_EMOJIS.length]}</span>
+              ))}
+            </FlyingStoneGroup>
+          ) : (
+            (() => {
+              const airStone = gameState.stones.find(s => s.status === 'air' || s.status === 'tossed')
+              const id = airStone?.id ?? gameState.selectedStoneId ?? 0
+              return STONE_EMOJIS[id % STONE_EMOJIS.length]
+            })()
+          )}
+        </FlyingStone>
+      )}
+
+      {/* Catch feedback */}
+      {catchMessage && (
+        <CatchFeedback>{catchMessage}</CatchFeedback>
+      )}
 
       {/* Chaos effects overlay */}
       <AnimatePresence>
@@ -677,6 +914,15 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
               <ChaosMessage>
                 <ChaosText>{chaosEffect.message}</ChaosText>
               </ChaosMessage>
+            )}
+            {chaosEffect.animation === 'constellation' && (
+              <ConstellationEffect
+                constellationIndex={(chaosEffect.data?.constellationIndex as number) ?? 0}
+                constellationName={(chaosEffect.data?.constellationName as string) ?? ''}
+                constellationDesc={(chaosEffect.data?.constellationDesc as string) ?? ''}
+                onWish={handleConstellationWish}
+                onTimeout={handleConstellationTimeout}
+              />
             )}
           </ChaosOverlay>
         )}
@@ -809,8 +1055,9 @@ const PhaseBar = styled.div`
 
 const BoardArea = styled.div`
   position: relative;
-  width: ${BOARD_WIDTH}px;
-  height: ${BOARD_HEIGHT}px;
+  width: 100%;
+  aspect-ratio: 9 / 10;
+  max-width: 360px;
   border-radius: 16px;
   overflow: hidden;
   background: #1e293b;
@@ -831,12 +1078,30 @@ const FloorSurface = styled.div`
   border-radius: 16px;
 `
 
+const flightArc = keyframes`
+  0%   { top: 62%; transform: translateX(-50%) scale(1.0) rotate(0deg); }
+  35%  { top: -4%; transform: translateX(-50%) scale(0.65) rotate(-15deg); }
+  40%  { top: -4%; transform: translateX(-50%) scale(0.65) rotate(-10deg); }
+  60%  { top: 28%; transform: translateX(-48%) scale(0.78) rotate(20deg); }
+  80%  { top: 48%; transform: translateX(-52%) scale(0.88) rotate(-10deg); }
+  100% { top: 62%; transform: translateX(-50%) scale(1.0) rotate(0deg); }
+`
+
+const popIn = keyframes`
+  0%   { transform: scale(0) rotate(-15deg); opacity: 0; }
+  60%  { transform: scale(1.3) rotate(5deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+`
+
 const StoneVisual = styled.div<{ $selected: boolean }>`
   position: absolute;
   font-size: 28px;
-  transition: opacity 0.2s, filter 0.2s;
+  transition: left 0.3s ease, top 0.3s ease, transform 0.3s ease, opacity 0.2s, filter 0.2s;
   pointer-events: none;
-  filter: ${({ $selected }) => $selected ? 'brightness(1.5) drop-shadow(0 0 8px #fbbf24)' : 'none'};
+  transform-origin: center bottom;
+  ${({ $selected }) => $selected && `
+    filter: brightness(1.5) drop-shadow(0 0 8px #fbbf24) !important;
+  `}
 `
 
 const TouchOverlay = styled.div`
@@ -844,6 +1109,45 @@ const TouchOverlay = styled.div`
   inset: 0;
   touch-action: none;
   z-index: 20;
+`
+
+const HoldStoneOverlay = styled.div`
+  position: absolute;
+  left: 50%;
+  z-index: 25;
+  touch-action: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: grab;
+  &:active {
+    cursor: grabbing;
+  }
+`
+
+const HoldStoneLarge = styled.div`
+  font-size: 56px;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+  pointer-events: none;
+`
+
+const HoldStoneGroup = styled.div`
+  display: flex;
+  gap: 4px;
+  pointer-events: none;
+`
+
+const HoldStoneGroupItem = styled.div`
+  font-size: 40px;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+`
+
+const SwipeHint = styled.div`
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+  pointer-events: none;
 `
 
 const ActionButton = styled.button`
@@ -863,6 +1167,87 @@ const ActionButton = styled.button`
   &:active {
     background: #2563eb;
   }
+`
+
+const FlyingStone = styled.div`
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  transform: translateX(-50%);
+  z-index: 100;
+  font-size: 36px;
+  pointer-events: none;
+  animation-name: ${flightArc};
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: forwards;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+  &.catch-zone {
+    filter: drop-shadow(0 0 12px #22c55e) drop-shadow(0 0 4px #22c55e);
+    cursor: pointer;
+  }
+`
+
+const FlyingStoneGroup = styled.div`
+  display: flex;
+  gap: 2px;
+  font-size: 28px;
+`
+
+const HandArea = styled.div`
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 28;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  border-radius: 12px;
+  padding: 6px 12px;
+`
+
+const HandIcon = styled.span`
+  font-size: 24px;
+`
+
+const HandStone = styled.span`
+  font-size: 24px;
+  animation: ${popIn} 0.3s ease-out forwards;
+`
+
+const CatchFeedback = styled.div`
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 110;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fbbf24;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+`
+
+const PickTimerBar = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  z-index: 25;
+`
+
+const PickTimerFill = styled.div`
+  height: 100%;
+  background: linear-gradient(90deg, #ef4444, #fbbf24);
+  transition: width 0.05s linear;
+  border-radius: 0 2px 2px 0;
 `
 
 const ChaosOverlay = styled(motion.div)`

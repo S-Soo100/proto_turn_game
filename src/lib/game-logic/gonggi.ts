@@ -3,10 +3,13 @@
 export type StoneStatus = 'floor' | 'hand' | 'tossed' | 'air' | 'lost'
 export type GamePhase =
   | 'scatter'
+  | 'select'
+  | 'hold'
   | 'toss'
   | 'pick'
   | 'catch'
   | 'stage-clear'
+  | 'round-clear'
   | 'success'
   | 'failed'
 
@@ -15,6 +18,7 @@ export interface Stone {
   status: StoneStatus
   x: number // 0~100 (% of board)
   y: number // 0~100 (% of board)
+  z: number // 0=floor, 0.15=selected, 0.3=hold, 1.0=peak
 }
 
 export interface GonggiState {
@@ -27,6 +31,7 @@ export interface GonggiState {
   chaosSurvived: number
   elapsedMs: number
   tossedStoneId: number | null
+  selectedStoneId: number | null
   seed: number
   triggeredChaosIds: string[]
   isFlipped: boolean       // screen-flip chaos
@@ -51,6 +56,26 @@ const STAGE_TIME_LIMITS: Record<number, number> = {
   4: 5_000,
   5: 10_000,
 }
+
+// Toss arc duration (ms) — how long the stone is in the air
+const TOSS_DURATIONS: Record<number, number> = {
+  1: 2400,
+  2: 2200,
+  3: 2000,
+  4: 1800,
+  5: 2400,
+}
+
+// Catch window (ms) — how long the player has to press catch
+const CATCH_WINDOWS: Record<number, number> = {
+  1: 500,
+  2: 400,
+  3: 350,
+  4: 300,
+  5: 500,
+}
+
+export type CatchTiming = 'perfect' | 'early' | 'miss'
 
 // ── Seeded Random (mulberry32) ──
 
@@ -107,6 +132,20 @@ export function getTimeLimit(stage: number): number {
   return STAGE_TIME_LIMITS[stage] ?? 8_000
 }
 
+/**
+ * Toss arc duration for a stage (ms).
+ */
+export function getTossDuration(stage: number): number {
+  return TOSS_DURATIONS[stage] ?? 2400
+}
+
+/**
+ * Catch window duration for a stage (ms).
+ */
+export function getCatchWindow(stage: number): number {
+  return CATCH_WINDOWS[stage] ?? 500
+}
+
 // ── State Functions ──
 
 export function createInitialState(seed?: number): GonggiState {
@@ -117,6 +156,7 @@ export function createInitialState(seed?: number): GonggiState {
     status: 'floor' as StoneStatus,
     x: 20 + rng() * 60,
     y: 20 + rng() * 60,
+    z: 0,
   }))
 
   return {
@@ -129,6 +169,7 @@ export function createInitialState(seed?: number): GonggiState {
     chaosSurvived: 0,
     elapsedMs: 0,
     tossedStoneId: null,
+    selectedStoneId: null,
     seed: s,
     triggeredChaosIds: [],
     isFlipped: false,
@@ -145,17 +186,54 @@ export function scatterStones(state: GonggiState): GonggiState {
     status: 'floor' as StoneStatus,
     x: 15 + rng() * 70,
     y: 15 + rng() * 70,
+    z: 0,
   }))
-  return { ...state, stones, phase: 'toss' }
+  // Stage 5 skips select/hold → goes directly to toss
+  const nextPhase: GamePhase = state.stage === 5 ? 'toss' : 'select'
+  return { ...state, stones, phase: nextPhase, selectedStoneId: null }
+}
+
+/**
+ * Select a floor stone to toss (stages 1-4 only).
+ * Sets the stone z=0.15 for visual highlight, phase stays 'select'.
+ */
+export function selectStone(state: GonggiState, stoneId: number): GonggiState | null {
+  if (state.phase !== 'select') return null
+
+  const stone = state.stones.find((s) => s.id === stoneId)
+  if (!stone || stone.status !== 'floor') return null
+
+  // Reset previous selection and set new one
+  const stones = state.stones.map((s) => ({
+    ...s,
+    z: s.id === stoneId ? 0.15 : 0,
+  }))
+
+  return { ...state, stones, selectedStoneId: stoneId }
+}
+
+/**
+ * Move selected stone to hand (hold position), transition to 'hold' phase.
+ * Sets stone z=0.3, status='hand'.
+ */
+export function holdStone(state: GonggiState): GonggiState | null {
+  if (state.phase !== 'select' || state.selectedStoneId === null) return null
+
+  const stones = state.stones.map((s) =>
+    s.id === state.selectedStoneId
+      ? { ...s, status: 'hand' as StoneStatus, z: 0.3 }
+      : s
+  )
+
+  return { ...state, stones, phase: 'hold' }
 }
 
 /**
  * Pick up a stone from the floor to toss.
- * For stages 1-4: first available floor stone is tossed.
- * For stage 5: all stones are tossed.
+ * For stages 1-4: uses held stone (from hold phase). For stage 5: toss all.
  */
 export function startToss(state: GonggiState): GonggiState {
-  if (state.phase !== 'toss') return state
+  if (state.phase !== 'toss' && state.phase !== 'hold') return state
 
   if (state.stage === 5) {
     // Stage 5: toss all stones
@@ -213,12 +291,12 @@ export function pickStones(state: GonggiState, pickedIds: number[]): GonggiState
 
 /**
  * Catch the tossed stone (player catches it).
- * Success: tossed stone goes to hand. Failure: stage fails.
+ * Success: tossed stone goes to hand. Failure (early/miss): stage fails.
  */
-export function catchStone(state: GonggiState, success: boolean): GonggiState {
+export function catchStone(state: GonggiState, success: boolean, timing?: CatchTiming): GonggiState {
   if (state.phase !== 'catch') return state
 
-  if (!success) {
+  if (!success || timing === 'early' || timing === 'miss') {
     return failSubstep(state)
   }
 
@@ -243,11 +321,15 @@ export function advanceSubstep(state: GonggiState): GonggiState {
     return checkStageComplete(state)
   }
 
-  // More substeps to go — scatter remaining floor stones and start next toss
+  // More substeps to go
+  // Stage 5 → toss directly. Stages 1-4: if hand stone exists → toss, else → select
+  const hasHandStone = state.stones.some((s) => s.status === 'hand')
+  const nextPhase: GamePhase = state.stage === 5 ? 'toss' : (hasHandStone ? 'toss' : 'select')
   return {
     ...state,
     substep: nextSubstep,
-    phase: 'toss',
+    phase: nextPhase,
+    selectedStoneId: null,
   }
 }
 
@@ -256,7 +338,7 @@ export function advanceSubstep(state: GonggiState): GonggiState {
  */
 export function checkStageComplete(state: GonggiState): GonggiState {
   if (state.stage >= MAX_STAGE) {
-    return checkGameComplete(state)
+    return { ...state, phase: 'round-clear' }
   }
 
   return {
@@ -269,10 +351,12 @@ export function checkStageComplete(state: GonggiState): GonggiState {
  * Advance to the next stage after stage-clear.
  */
 export function advanceStage(state: GonggiState): GonggiState {
-  if (state.phase !== 'stage-clear') return state
+  if (state.phase !== 'stage-clear' && state.phase !== 'round-clear') return state
 
-  const nextStage = state.stage + 1
-  const rng = mulberry32(state.seed + nextStage * 1000 + state.round * 10000)
+  const isRoundClear = state.phase === 'round-clear'
+  const nextStage = isRoundClear ? 1 : state.stage + 1
+  const nextRound = isRoundClear ? state.round + 1 : state.round
+  const rng = mulberry32(state.seed + nextStage * 1000 + nextRound * 10000)
 
   // Reset all stones to floor with new positions
   const stones = state.stones.map((s) => ({
@@ -280,16 +364,20 @@ export function advanceStage(state: GonggiState): GonggiState {
     status: 'floor' as StoneStatus,
     x: 15 + rng() * 70,
     y: 15 + rng() * 70,
+    z: 0,
   }))
 
   return {
     ...state,
     stones,
     stage: nextStage,
+    round: nextRound,
     substep: 0,
     phase: 'scatter',
     tossedStoneId: null,
+    selectedStoneId: null,
     triggeredChaosIds: [],
+    isFlipped: false,
   }
 }
 
@@ -325,6 +413,7 @@ export function retryStage(state: GonggiState): GonggiState {
     status: 'floor' as StoneStatus,
     x: 15 + rng() * 70,
     y: 15 + rng() * 70,
+    z: 0,
   }))
 
   return {
@@ -333,6 +422,7 @@ export function retryStage(state: GonggiState): GonggiState {
     substep: 0,
     phase: 'scatter',
     tossedStoneId: null,
+    selectedStoneId: null,
   }
 }
 

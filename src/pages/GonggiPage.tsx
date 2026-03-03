@@ -90,7 +90,7 @@ export function GonggiPage() {
             <HeroEmoji>🫴</HeroEmoji>
             <HeroTitle>열받는 공기놀이</HeroTitle>
             <HeroDesc>
-              5개의 공깃돌로 일단~꺾기까지 클리어하세요.
+              돌을 골라 → 던지고 → 바닥 돌을 잡으세요!
               <br />
               3라운드부터 변칙 룰이 발동됩니다... 😈
             </HeroDesc>

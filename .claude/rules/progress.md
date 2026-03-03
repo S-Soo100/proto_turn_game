@@ -137,13 +137,14 @@
   - 라운드별 발동 확률: R1-2: 0%, R3: 30%, R4: 50%, R5+: 70~90%
   - 7개 변칙 룰: bird-transform, cat-swipe, stone-eyes, fake-clear, split, danmaku, screen-flip
   - 각 룰 별도 파일: `src/lib/game-logic/chaos-rules/*.ts`
-- **Physics**: `src/lib/physics/gonggi-physics.ts` (matter.js 물리 래퍼)
-  - stone 5개 Body, 벽/바닥, toss/scatter/catSwipe/flee force
 - **Component**: `src/components/game/GonggiBoard.tsx`
-  - 2.5D 렌더링 (CSS perspective), 물리 좌표 기반 돌 위치
-  - 터치 스와이프로 돌 선택, 버튼으로 던지기/잡기
+  - CSS 2.5D 렌더링 (x,y% 바닥좌표 + z축 높이 → translateY + scale)
+  - select→hold→toss→pick→catch 단계 흐름
+  - CSS @keyframes 포물선 toss 애니메이션 (단계별 duration)
+  - 타이밍 기반 catch (catchWindow, perfect/early/miss)
   - 변칙 룰 이펙트 오버레이 (AnimatePresence)
   - 일시정지/재개, 탄막 댓글, 화면 뒤집기 CSS
+- **z축 유틸**: `src/lib/gonggi-z-axis.ts` — z값(0~1) → CSS transform/filter/shadow
 - **Chaos Effects**: `src/components/game/chaos/`
   - BirdTransformEffect, CatSwipeEffect, StoneEyesEffect
   - FakeClearEffect, SplitEffect, DanmakuOverlay
@@ -151,10 +152,77 @@
 - **Leaderboard**: `src/lib/gonggi-leaderboard.ts` + `GonggiLeaderboard.tsx`
   - 클리어 시간 ASC 정렬, 실패 횟수, 변칙 생존 횟수 표시
 - **라우트**: `/gonggi` 추가, HomePage SOLO_GAMES에 공기놀이 카드 추가
-- **의존성**: `matter-js` + `@types/matter-js` 추가
 - **DB**: `game_types`에 gonggi 행 INSERT + `gonggi_leaderboard` 테이블 생성 필요 (SQL Editor)
 - **테스트**: gonggi.test.ts 58개 + gonggi-chaos.test.ts 36개 + GonggiBoard.test.tsx 11개 = **105개**
 - **총 테스트**: 기존 164개 → **258개** (신규 94개)
+
+### 10단계: 공기놀이 UX 대개편 (E-GG002) ✅
+- **matter.js 완전 제거** (T-GG009):
+  - `src/lib/physics/gonggi-physics.ts` 삭제
+  - `matter-js`, `@types/matter-js` 의존성 제거
+  - GonggiBoard.tsx에서 물리 엔진 코드 전면 제거
+  - CSS 2.5D 렌더링으로 대체: stone.x/y(%) → `left/top` + `getStoneStyle(stone.z)` → translateY/scale
+  - StoneEyesEffect.tsx: StonePosition → 인라인 `{id, x, y}` 타입 교체
+- **select + hold 단계 추가** (T-GG010):
+  - `GamePhase += 'select' | 'hold'`, `GonggiState += selectedStoneId`
+  - `selectStone()`: floor 돌 선택 → z=0.15 하이라이트
+  - `holdStone()`: 선택 돌 → z=0.3, status='hand', phase='hold'
+  - `scatterStones()`: stages 1-4 → 'select', stage 5 → 'toss'
+  - `advanceSubstep()`: hand stone 있으면 → 'toss' 직행, 없으면 → 'select'
+  - GonggiBoard.tsx: HoldArea UI (🤚+돌), select 탭 인터랙션, "던지기 🫴" 버튼
+- **z축 포물선 + 타이밍 catch** (T-GG011):
+  - 단계별 포물선 시간: 1단 2400ms ~ 4단 1800ms, 5단 2400ms
+  - 단계별 catch 윈도우: 1단 500ms ~ 4단 300ms, 5단 500ms
+  - `CatchTiming = 'perfect' | 'early' | 'miss'`
+  - CSS `@keyframes toss-arc` 애니메이션 (z=0.3→1.0→0)
+  - catch 버튼: 윈도우 활성 시 "✊ 지금!" / 비활성 시 "✊ 잡기"
+  - pick 타이머 바 (CSS drain)
+- **테스트**: gonggi.test.ts 85개 + GonggiBoard.test.tsx 14개 + GonggiPage.test.tsx 12개
+- **총 테스트**: 기존 258개 → **315개** (신규 57개)
+
+### 11단계: 공기놀이 FlyingStone + HandArea + 탭캐치 (T-GG012) ✅
+- **FlyingStone 포물선 비행** (CatchButton 제거):
+  - `tossArc` keyframe → `flightArc` 교체: Container 기준 top 62%→-4%→62% 비행
+  - catch zone 진입 시 초록 글로우 + pointer-events 활성화
+  - FlyingStone 직접 탭 = catch (버튼 클릭 → 돌 탭으로 동작 일관성 확보)
+- **HandArea 손바닥 컴포넌트**:
+  - pick/catch/toss phase에서 수집된 돌을 🤚 + 이모지로 표시
+  - `popIn` keyframe: scale(0)→scale(1.3)→scale(1) 등장 애니메이션
+  - toss phase에서 toss 후보 돌은 HandArea에서 제외 (HoldStoneOverlay에서 표시)
+- **toss phase 막힘 버그 수정**:
+  - HoldStoneOverlay 조건: `toss && stage===5` → `toss` (모든 stage)
+  - `selectedStoneId` null일 때 첫 번째 hand 돌로 폴백
+  - phaseText: "돌을 던지세요!" → "위로 스와이프하여 던지기!" (모든 stage 통일)
+- **FlyingStone 이모지 오류 수정**:
+  - `selectedStoneId` null 폴백 → air/tossed 돌의 실제 ID 기반 이모지
+- **돌 렌더링 분기 개선**:
+  - air/tossed 돌: tossAnimating 시 보드 숨김 → FlyingStone이 렌더링
+  - hand 돌: pick/catch/toss phase에서 보드 숨김 → HandArea가 렌더링
+- **E2E 테스트**: catch 버튼→FlyingStone 탭, phase text assertion 수정
+- **총 테스트**: 315 unit/integration + 32 E2E 유지 (전체 통과)
+
+### 12단계: catch 즉시 허용 + 낙하 시각 효과 (T-GG013) ✅
+- **catch 즉시 허용**:
+  - `catchWindowActive` 상태 완전 제거 (useState, 타이머, 조건 분기 모두 삭제)
+  - `handleCatch`: catch phase이기만 하면 언제든 탭 = perfect 성공
+  - `startTossAnimation`: catchWindow 타이머 제거, auto-miss 타이머만 유지
+  - FlyingStone catch-zone 클래스: catch phase 시작부터 초록 글로우 표시
+  - "너무 빨라요!" 메시지 제거 — `CatchTiming` 타입은 순수 로직에서 하위 호환 유지
+- **낙하 시각 효과 강화**:
+  - `flightArc` keyframe에 `rotate()` + `translateX` 미세 흔들림 추가
+  - 상승(0→40%): 반시계 회전 (-15deg → -10deg)
+  - 하강(40→100%): 시계↔반시계 교차 회전 (20deg → -10deg → 0deg) + 좌우 흔들림 (±2%)
+- **총 테스트**: 315 unit/integration + 32 E2E 유지 (전체 통과)
+
+### 13단계: 공기놀이 라운드 무한 루프 ✅
+- **라운드 루프 구현**: 꺾기(5단계) 클리어 → `round-clear` → 일단(1단계)부터 재시작하는 무한 루프
+  - `GamePhase`에 `'round-clear'` 추가
+  - `checkStageComplete()`: stage 5 완료 시 `'round-clear'` 반환 (기존 `'success'` 대신)
+  - `advanceStage()`: `'round-clear'` 처리 — stage=1, round++, isFlipped=false 리셋
+  - GonggiBoard.tsx: `🎉 라운드 N 클리어!` phaseText + `라운드 N+1 시작 →` 버튼
+- **목적**: 변칙 룰이 R3+부터 발동하도록 설계되어 있으나, 기존에는 R1 한 바퀴만 가능해서 변칙 룰 미발동 → 이제 R3+ 도달 가능
+- **게임 종료 제거**: `checkGameComplete()` 미사용 (무한 라운드), `'success'` phase는 타입에만 유지
+- **테스트**: gonggi.test.ts 90개 (+5), GonggiBoard.test.tsx 15개 (+1) = **321개** (기존 315개 + 6개)
 
 ## 다음 단계 (미구현 → 티켓으로 관리)
 
@@ -167,6 +235,8 @@
 | E-RSG001 | 반응속도 게임 MVP | T-RSG001~T-RSG008 (완료) |
 | — | 프로필 수정 기능 | T-S004 (완료) |
 | E-GG001 | 공기놀이 MVP (Chaos-only) | T-GG001~T-GG008 (완료) |
+| E-GG002 | 공기놀이 UX 대개편 | T-GG009~T-GG012 (완료) |
+| — | catch 즉시 허용 + 낙하 시각 효과 | T-GG013 (완료) |
 | E-BP001 | 블록 퍼즐 MVP | T-BP001, T-BP002, T-BP003 |
 
 ### 아직 에픽/티켓화되지 않은 항목
