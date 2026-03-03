@@ -34,9 +34,9 @@ import { catSwipeRule } from '@/lib/game-logic/chaos-rules/cat-swipe'
 import { stoneEyesRule } from '@/lib/game-logic/chaos-rules/stone-eyes'
 import { fakeClearRule } from '@/lib/game-logic/chaos-rules/fake-clear'
 import { splitRule } from '@/lib/game-logic/chaos-rules/split'
-import { danmakuRule } from '@/lib/game-logic/chaos-rules/danmaku'
 import { screenFlipRule } from '@/lib/game-logic/chaos-rules/screen-flip'
 import { constellationRule } from '@/lib/game-logic/chaos-rules/constellation'
+import CatSwipeEffect from './chaos/CatSwipeEffect'
 import ConstellationEffect from './chaos/ConstellationEffect'
 import { getStoneStyle } from '@/lib/gonggi-z-axis'
 
@@ -48,7 +48,6 @@ const ALL_CHAOS_RULES: ChaosRule[] = [
   stoneEyesRule,
   fakeClearRule,
   splitRule,
-  danmakuRule,
   screenFlipRule,
   constellationRule,
 ]
@@ -73,7 +72,6 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   const [chaosEffect, setChaosEffect] = useState<ChaosResult | null>(null)
   const [selectedStoneIds, setSelectedStoneIds] = useState<Set<number>>(new Set())
   const [message, setMessage] = useState<string>('')
-  const [danmakuComments, setDanmakuComments] = useState<{ text: string; yPercent: number; id: number }[]>([])
   const [isPaused, setIsPaused] = useState(false)
   const [swipePath, setSwipePath] = useState<{ x: number; y: number }[]>([])
   const [tossAnimating, setTossAnimating] = useState(false)
@@ -90,7 +88,6 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   const isSwipingRef = useRef(false)
   const chaosTimeoutRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const rngRef = useRef(() => Math.random())
-  const danmakuIdRef = useRef(0)
   const tossTimerRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const pickTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const holdDragStartRef = useRef<{ y: number; time: number } | null>(null)
@@ -216,11 +213,6 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
       }
     }
 
-    // Check danmaku
-    const danmaku = checkChaos(state, 'during-play', ALL_CHAOS_RULES, rngRef.current)
-    if (danmaku && danmaku.result.animation === 'danmaku') {
-      triggerDanmaku(danmaku.result, state, danmaku.rule)
-    }
   }, [])
 
   const handleHoldDragStart = useCallback((e: React.PointerEvent) => {
@@ -493,30 +485,20 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
           chaosTimeoutRef.current.push(tid)
           break
         }
-        case 'all-stones-scattered': {
-          // Move stones in the direction via x,y coordinate shift
-          const direction = result.data?.direction as 'left' | 'right' | 'top'
-          const scattered = {
-            ...updatedState,
-            stones: updatedState.stones.map((s) => {
-              if (s.status === 'lost') return s
-              let newX = s.x
-              let newY = s.y
-              const offset = 30 + Math.random() * 20
-              switch (direction) {
-                case 'left': newX = Math.max(0, s.x - offset); break
-                case 'right': newX = Math.min(100, s.x + offset); break
-                case 'top': newY = Math.max(0, s.y - offset); break
-              }
-              return { ...s, x: newX, y: newY }
-            }),
-          }
-          const afterScatter = failSubstep(scattered)
+        case 'all-stones-lost': {
+          // Lose all stones then fail — CatSwipeEffect handles visual
+          let afterLoss = updatedState
+          afterLoss.stones.forEach((s) => {
+            if (s.status !== 'lost') {
+              afterLoss = loseStone(afterLoss, s.id)
+            }
+          })
+          const afterFail = failSubstep(afterLoss)
           const tid = setTimeout(() => {
             setChaosEffect(null)
-            setGameState(afterScatter)
-            gameStateRef.current = afterScatter
-          }, 2500)
+            setGameState(afterFail)
+            gameStateRef.current = afterFail
+          }, 2800)
           chaosTimeoutRef.current.push(tid)
           break
         }
@@ -570,27 +552,6 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
           chaosTimeoutRef.current.push(tid)
         }
       }
-    },
-    [],
-  )
-
-  const triggerDanmaku = useCallback(
-    (result: ChaosResult, state: GonggiState, rule: ChaosRule) => {
-      const updatedState = applyChaosToState(state, result, rule.id)
-      setGameState(updatedState)
-      gameStateRef.current = updatedState
-
-      const comments = (result.data?.comments as { text: string; delayMs: number; yPercent: number }[]) ?? []
-      comments.forEach((c) => {
-        const tid = setTimeout(() => {
-          const id = danmakuIdRef.current++
-          setDanmakuComments((prev) => [...prev, { text: c.text, yPercent: c.yPercent, id }])
-          setTimeout(() => {
-            setDanmakuComments((prev) => prev.filter((d) => d.id !== id))
-          }, 4000)
-        }, c.delayMs)
-        chaosTimeoutRef.current.push(tid)
-      })
     },
     [],
   )
@@ -866,17 +827,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
               </ChaosMessage>
             )}
             {chaosEffect.animation === 'cat-swipe' && (
-              <ChaosMessage>
-                <motion.div
-                  initial={{ x: -200 }}
-                  animate={{ x: [null, 0, 200] }}
-                  transition={{ duration: 1, times: [0, 0.4, 1] }}
-                  style={{ fontSize: '48px' }}
-                >
-                  🐾
-                </motion.div>
-                <ChaosText>{chaosEffect.message}</ChaosText>
-              </ChaosMessage>
+              <CatSwipeEffect onComplete={() => {}} />
             )}
             {chaosEffect.animation === 'fake-clear' && (
               <ChaosMessage>
@@ -932,17 +883,6 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
           </ChaosOverlay>
         )}
       </AnimatePresence>
-
-      {/* Danmaku overlay */}
-      {danmakuComments.length > 0 && (
-        <DanmakuLayer>
-          {danmakuComments.map((c) => (
-            <DanmakuComment key={c.id} style={{ top: `${c.yPercent}%` }}>
-              {c.text}
-            </DanmakuComment>
-          ))}
-        </DanmakuLayer>
-      )}
 
       {/* Message toast */}
       <AnimatePresence>
@@ -1295,30 +1235,6 @@ const ChaosText = styled.div`
   font-weight: 700;
   color: #fbbf24;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-`
-
-const danmakuSlide = keyframes`
-  from { transform: translateX(100%); }
-  to { transform: translateX(-100%); }
-`
-
-const DanmakuLayer = styled.div`
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 40;
-`
-
-const DanmakuComment = styled.div`
-  position: absolute;
-  white-space: nowrap;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.8);
-  background: rgba(0, 0, 0, 0.4);
-  padding: 2px 8px;
-  border-radius: 4px;
-  animation: ${danmakuSlide} 4s linear forwards;
 `
 
 const MessageToast = styled(motion.div)`

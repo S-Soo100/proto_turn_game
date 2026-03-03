@@ -13,7 +13,6 @@ import { catSwipeRule } from './chaos-rules/cat-swipe'
 import { stoneEyesRule } from './chaos-rules/stone-eyes'
 import { fakeClearRule } from './chaos-rules/fake-clear'
 import { splitRule } from './chaos-rules/split'
-import { danmakuRule } from './chaos-rules/danmaku'
 import { screenFlipRule } from './chaos-rules/screen-flip'
 import { constellationRule } from './chaos-rules/constellation'
 
@@ -36,7 +35,6 @@ const ALL_RULES: ChaosRule[] = [
   stoneEyesRule,
   fakeClearRule,
   splitRule,
-  danmakuRule,
   screenFlipRule,
   constellationRule,
 ]
@@ -277,12 +275,6 @@ describe('rule definitions', () => {
     expect(splitRule.canRepeat).toBe(false)
   })
 
-  it('danmaku: during-play, minRound 1, repeatable', () => {
-    expect(danmakuRule.trigger).toBe('during-play')
-    expect(danmakuRule.minRound).toBe(1)
-    expect(danmakuRule.canRepeat).toBe(true)
-  })
-
   it('screen-flip: stage-transition, minRound 2, not repeatable', () => {
     expect(screenFlipRule.trigger).toBe('stage-transition')
     expect(screenFlipRule.minRound).toBe(2)
@@ -308,10 +300,10 @@ describe('rule execution', () => {
     expect(result.animation).toBe('bird-transform')
   })
 
-  it('cat-swipe returns all-stones-scattered type with direction', () => {
+  it('cat-swipe returns all-stones-lost type', () => {
     const result = catSwipeRule.execute(state, rng)
-    expect(result.type).toBe('all-stones-scattered')
-    expect(result.data?.direction).toBeDefined()
+    expect(result.type).toBe('all-stones-lost')
+    expect(result.message).toBe('야옹~')
   })
 
   it('stone-eyes returns stones-flee type with affected ids', () => {
@@ -332,14 +324,6 @@ describe('rule execution', () => {
     const idx = result.data?.correctIndex as number
     expect(idx).toBeGreaterThanOrEqual(0)
     expect(idx).toBeLessThan(3)
-  })
-
-  it('danmaku returns visual-only type with comments array', () => {
-    const result = danmakuRule.execute(state, rng)
-    expect(result.type).toBe('visual-only')
-    const comments = result.data?.comments as unknown[]
-    expect(Array.isArray(comments)).toBe(true)
-    expect(comments.length).toBeGreaterThanOrEqual(5)
   })
 
   it('screen-flip returns screen-flip type', () => {

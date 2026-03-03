@@ -1,7 +1,5 @@
 import type { ChaosRule } from '../gonggi-chaos'
 
-export type CatDirection = 'left' | 'right' | 'top'
-
 export const catSwipeRule: ChaosRule = {
   id: 'cat-swipe',
   name: '고양이 습격',
@@ -9,26 +7,20 @@ export const catSwipeRule: ChaosRule = {
   minRound: 1,
   probability: 0.35,
   canRepeat: false,
-  execute: (_state, rng) => {
-    const directions: CatDirection[] = ['left', 'right', 'top']
-    const direction = directions[Math.floor(rng() * directions.length)]
-
-    return {
-      type: 'all-stones-scattered',
-      ruleId: 'cat-swipe',
-      animation: 'cat-swipe',
-      message: '야옹~',
-      data: {
-        direction,
-        timeline: [
-          { at: 0, action: 'fake-success' },
-          { at: 200, action: 'paw-slide-in' },
-          { at: 400, action: 'hit-stones' },
-          { at: 700, action: 'stones-scatter' },
-          { at: 1000, action: 'paw-slide-out' },
-          { at: 1300, action: 'message' },
-        ],
-      },
-    }
-  },
+  execute: (_state, _rng) => ({
+    type: 'all-stones-lost',
+    ruleId: 'cat-swipe',
+    animation: 'cat-swipe',
+    message: '야옹~',
+    data: {
+      timeline: [
+        { at: 0, action: 'fake-success' },
+        { at: 400, action: 'paw-descend' },
+        { at: 800, action: 'paw-swipe' },
+        { at: 1400, action: 'stones-lost' },
+        { at: 1600, action: 'paw-exit' },
+        { at: 2000, action: 'message' },
+      ],
+    },
+  }),
 }
