@@ -36,7 +36,7 @@ export const danmakuRule: ChaosRule = {
   id: 'danmaku',
   name: '관객 야유',
   trigger: 'during-play',
-  minRound: 3,
+  minRound: 1,
   probability: 0.40,
   canRepeat: true,
   execute: (_state, rng) => {

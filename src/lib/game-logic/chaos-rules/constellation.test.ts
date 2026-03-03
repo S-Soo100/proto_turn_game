@@ -21,7 +21,7 @@ describe('constellationRule definition', () => {
     expect(constellationRule.id).toBe('constellation')
     expect(constellationRule.name).toBe('별자리 승천')
     expect(constellationRule.trigger).toBe('after-toss')
-    expect(constellationRule.minRound).toBe(3)
+    expect(constellationRule.minRound).toBe(1)
     expect(constellationRule.canRepeat).toBe(false)
     expect(constellationRule.probability).toBe(0.20)
   })

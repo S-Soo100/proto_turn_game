@@ -4,7 +4,7 @@ export const splitRule: ChaosRule = {
   id: 'split',
   name: '무한 증식',
   trigger: 'after-toss',
-  minRound: 4,
+  minRound: 2,
   probability: 0.25,
   canRepeat: false,
   execute: (state, rng) => {

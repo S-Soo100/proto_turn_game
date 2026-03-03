@@ -66,7 +66,7 @@ describe('GonggiPage lobby', () => {
 
   test('로비에 변칙 룰 경고가 표시된다', () => {
     renderPage()
-    expect(screen.getByText(/라운드 3부터 변칙 룰 발동/)).toBeInTheDocument()
+    expect(screen.getByText(/라운드 1부터 변칙 룰 발동/)).toBeInTheDocument()
   })
 
   test('로비에 리더보드 섹션이 표시된다', () => {

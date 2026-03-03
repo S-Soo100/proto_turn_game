@@ -6,7 +6,7 @@ export const catSwipeRule: ChaosRule = {
   id: 'cat-swipe',
   name: '고양이 습격',
   trigger: 'before-success',
-  minRound: 3,
+  minRound: 1,
   probability: 0.35,
   canRepeat: false,
   execute: (_state, rng) => {

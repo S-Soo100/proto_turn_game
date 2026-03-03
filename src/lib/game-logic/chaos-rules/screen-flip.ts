@@ -4,7 +4,7 @@ export const screenFlipRule: ChaosRule = {
   id: 'screen-flip',
   name: '화면 뒤집기',
   trigger: 'stage-transition',
-  minRound: 4,
+  minRound: 2,
   probability: 0.15,
   canRepeat: false,
   execute: (_state, _rng) => {

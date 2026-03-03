@@ -4,7 +4,7 @@ export const stoneEyesRule: ChaosRule = {
   id: 'stone-eyes',
   name: '돌멩이의 자아',
   trigger: 'before-pick',
-  minRound: 3,
+  minRound: 1,
   probability: 0.30,
   canRepeat: true,
   execute: (state, _rng) => {

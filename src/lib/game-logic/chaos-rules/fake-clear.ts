@@ -4,7 +4,7 @@ export const fakeClearRule: ChaosRule = {
   id: 'fake-clear',
   name: '가짜 클리어',
   trigger: 'stage-transition',
-  minRound: 3,
+  minRound: 1,
   probability: 0.20,
   canRepeat: false,
   execute: (_state, _rng) => {

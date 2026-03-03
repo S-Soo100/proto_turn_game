@@ -15,6 +15,7 @@ import { fakeClearRule } from './chaos-rules/fake-clear'
 import { splitRule } from './chaos-rules/split'
 import { danmakuRule } from './chaos-rules/danmaku'
 import { screenFlipRule } from './chaos-rules/screen-flip'
+import { constellationRule } from './chaos-rules/constellation'
 
 // ── Helpers ──
 
@@ -37,22 +38,26 @@ const ALL_RULES: ChaosRule[] = [
   splitRule,
   danmakuRule,
   screenFlipRule,
+  constellationRule,
 ]
 
 // ── getChaosChance ──
 
 describe('getChaosChance', () => {
-  it('rounds 1-2: 0%', () => {
-    expect(getChaosChance(1)).toBe(0)
-    expect(getChaosChance(2)).toBe(0)
+  it('round 1: 15%', () => {
+    expect(getChaosChance(1)).toBe(0.15)
   })
 
-  it('round 3: 30%', () => {
-    expect(getChaosChance(3)).toBe(0.3)
+  it('round 2: 25%', () => {
+    expect(getChaosChance(2)).toBe(0.25)
   })
 
-  it('round 4: 50%', () => {
-    expect(getChaosChance(4)).toBe(0.5)
+  it('round 3: 40%', () => {
+    expect(getChaosChance(3)).toBe(0.4)
+  })
+
+  it('round 4: 60%', () => {
+    expect(getChaosChance(4)).toBe(0.6)
   })
 
   it('round 5: 70%', () => {
@@ -72,18 +77,23 @@ describe('getChaosChance', () => {
 // ── shouldTriggerChaos ──
 
 describe('shouldTriggerChaos', () => {
-  it('never triggers in rounds 1-2', () => {
-    expect(shouldTriggerChaos(1, makeRng(0))).toBe(false)
-    expect(shouldTriggerChaos(2, makeRng(0))).toBe(false)
+  it('round 1: triggers when rng < 15%', () => {
+    expect(shouldTriggerChaos(1, makeRng(0.1))).toBe(true)
+    expect(shouldTriggerChaos(1, makeRng(0.2))).toBe(false)
+  })
+
+  it('round 2: triggers when rng < 25%', () => {
+    expect(shouldTriggerChaos(2, makeRng(0.2))).toBe(true)
+    expect(shouldTriggerChaos(2, makeRng(0.3))).toBe(false)
   })
 
   it('triggers when rng < chance', () => {
-    // Round 3: 30% chance. rng = 0.2 < 0.3 → true
-    expect(shouldTriggerChaos(3, makeRng(0.2))).toBe(true)
+    // Round 3: 40% chance. rng = 0.3 < 0.4 → true
+    expect(shouldTriggerChaos(3, makeRng(0.3))).toBe(true)
   })
 
   it('does not trigger when rng >= chance', () => {
-    // Round 3: 30% chance. rng = 0.5 >= 0.3 → false
+    // Round 3: 40% chance. rng = 0.5 >= 0.4 → false
     expect(shouldTriggerChaos(3, makeRng(0.5))).toBe(false)
   })
 
@@ -109,15 +119,28 @@ describe('selectRule', () => {
   })
 
   it('filters by minRound', () => {
-    // split requires minRound 4, round 3 should not include it
+    // split requires minRound 2, round 1 should not include it
     const result = selectRule(
       [splitRule],
       'after-toss',
-      3,
+      1,
       [],
       makeRng(0.1),
     )
     expect(result).toBeNull()
+  })
+
+  it('includes rule when round meets minRound', () => {
+    // split requires minRound 2, round 2 should include it
+    const result = selectRule(
+      [splitRule],
+      'after-toss',
+      2,
+      [],
+      makeRng(0.1),
+    )
+    expect(result).not.toBeNull()
+    expect(result!.id).toBe('split')
   })
 
   it('filters already-triggered non-repeatable rules', () => {
@@ -189,22 +212,30 @@ describe('applyChaosToState', () => {
 // ── checkChaos ──
 
 describe('checkChaos', () => {
-  it('returns null for rounds 1-2', () => {
+  it('can trigger in round 1 when rng < 15%', () => {
     const state = { ...createInitialState(SEED), round: 1 }
-    const result = checkChaos(state, 'after-toss', ALL_RULES, makeRng(0))
+    // rng sequence: first call (0.1 < 0.15 = trigger), second for rule selection
+    const rng = makeSequenceRng([0.1, 0.1])
+    const result = checkChaos(state, 'after-toss', ALL_RULES, rng)
+    expect(result).not.toBeNull()
+  })
+
+  it('returns null in round 1 if rng exceeds 15%', () => {
+    const state = { ...createInitialState(SEED), round: 1 }
+    const result = checkChaos(state, 'after-toss', ALL_RULES, makeRng(0.2))
     expect(result).toBeNull()
   })
 
   it('returns null if rng exceeds chance', () => {
     const state = { ...createInitialState(SEED), round: 3 }
-    // Round 3: 30% chance, rng = 0.5 → no trigger
+    // Round 3: 40% chance, rng = 0.5 → no trigger
     const result = checkChaos(state, 'after-toss', ALL_RULES, makeRng(0.5))
     expect(result).toBeNull()
   })
 
   it('returns rule and result when chaos triggers', () => {
     const state = { ...createInitialState(SEED), round: 3 }
-    // rng sequence: first call (0.1 < 0.3 = trigger), second for rule selection
+    // rng sequence: first call (0.1 < 0.4 = trigger), second for rule selection
     const rng = makeSequenceRng([0.1, 0.1])
     const result = checkChaos(state, 'after-toss', ALL_RULES, rng)
     expect(result).not.toBeNull()
@@ -216,46 +247,52 @@ describe('checkChaos', () => {
 // ── Individual Rule Definitions ──
 
 describe('rule definitions', () => {
-  it('bird-transform: after-toss, minRound 3, not repeatable', () => {
+  it('bird-transform: after-toss, minRound 1, not repeatable', () => {
     expect(birdTransformRule.trigger).toBe('after-toss')
-    expect(birdTransformRule.minRound).toBe(3)
+    expect(birdTransformRule.minRound).toBe(1)
     expect(birdTransformRule.canRepeat).toBe(false)
   })
 
-  it('cat-swipe: before-success, minRound 3, not repeatable', () => {
+  it('cat-swipe: before-success, minRound 1, not repeatable', () => {
     expect(catSwipeRule.trigger).toBe('before-success')
-    expect(catSwipeRule.minRound).toBe(3)
+    expect(catSwipeRule.minRound).toBe(1)
     expect(catSwipeRule.canRepeat).toBe(false)
   })
 
-  it('stone-eyes: before-pick, minRound 3, repeatable', () => {
+  it('stone-eyes: before-pick, minRound 1, repeatable', () => {
     expect(stoneEyesRule.trigger).toBe('before-pick')
-    expect(stoneEyesRule.minRound).toBe(3)
+    expect(stoneEyesRule.minRound).toBe(1)
     expect(stoneEyesRule.canRepeat).toBe(true)
   })
 
-  it('fake-clear: stage-transition, minRound 3, not repeatable', () => {
+  it('fake-clear: stage-transition, minRound 1, not repeatable', () => {
     expect(fakeClearRule.trigger).toBe('stage-transition')
-    expect(fakeClearRule.minRound).toBe(3)
+    expect(fakeClearRule.minRound).toBe(1)
     expect(fakeClearRule.canRepeat).toBe(false)
   })
 
-  it('split: after-toss, minRound 4, not repeatable', () => {
+  it('split: after-toss, minRound 2, not repeatable', () => {
     expect(splitRule.trigger).toBe('after-toss')
-    expect(splitRule.minRound).toBe(4)
+    expect(splitRule.minRound).toBe(2)
     expect(splitRule.canRepeat).toBe(false)
   })
 
-  it('danmaku: during-play, minRound 3, repeatable', () => {
+  it('danmaku: during-play, minRound 1, repeatable', () => {
     expect(danmakuRule.trigger).toBe('during-play')
-    expect(danmakuRule.minRound).toBe(3)
+    expect(danmakuRule.minRound).toBe(1)
     expect(danmakuRule.canRepeat).toBe(true)
   })
 
-  it('screen-flip: stage-transition, minRound 4, not repeatable', () => {
+  it('screen-flip: stage-transition, minRound 2, not repeatable', () => {
     expect(screenFlipRule.trigger).toBe('stage-transition')
-    expect(screenFlipRule.minRound).toBe(4)
+    expect(screenFlipRule.minRound).toBe(2)
     expect(screenFlipRule.canRepeat).toBe(false)
+  })
+
+  it('constellation: after-toss, minRound 1, not repeatable', () => {
+    expect(constellationRule.trigger).toBe('after-toss')
+    expect(constellationRule.minRound).toBe(1)
+    expect(constellationRule.canRepeat).toBe(false)
   })
 })
 

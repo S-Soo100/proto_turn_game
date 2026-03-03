@@ -31,12 +31,13 @@ export interface ChaosRule {
 
 /**
  * Get chaos trigger chance based on current round.
- * R1-2: 0%, R3: 30%, R4: 50%, R5+: 70-90%
+ * R1: 15%, R2: 25%, R3: 40%, R4: 60%, R5+: 70-90%
  */
 export function getChaosChance(round: number): number {
-  if (round <= 2) return 0
-  if (round === 3) return 0.3
-  if (round === 4) return 0.5
+  if (round === 1) return 0.15
+  if (round === 2) return 0.25
+  if (round === 3) return 0.4
+  if (round === 4) return 0.6
   // Round 5+: 0.7 + (round - 5) * 0.05, max 0.9
   return Math.min(0.9, 0.7 + (round - 5) * 0.05)
 }

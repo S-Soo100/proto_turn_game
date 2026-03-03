@@ -35,6 +35,7 @@ export interface GonggiState {
   seed: number
   triggeredChaosIds: string[]
   isFlipped: boolean       // screen-flip chaos
+  substepSnapshot: Stone[] | null  // snapshot for substep-only retry
 }
 
 export interface GonggiResult {
@@ -50,29 +51,29 @@ export const MAX_STAGE = 5
 
 // Time limits per stage (ms)
 const STAGE_TIME_LIMITS: Record<number, number> = {
-  1: 8_000,
-  2: 7_000,
-  3: 6_000,
-  4: 5_000,
-  5: 10_000,
+  1: 12_000,
+  2: 10_000,
+  3: 9_000,
+  4: 8_000,
+  5: 15_000,
 }
 
 // Toss arc duration (ms) — how long the stone is in the air
 const TOSS_DURATIONS: Record<number, number> = {
-  1: 2400,
-  2: 2200,
-  3: 2000,
-  4: 1800,
-  5: 2400,
+  1: 3000,
+  2: 2800,
+  3: 2600,
+  4: 2200,
+  5: 3000,
 }
 
 // Catch window (ms) — how long the player has to press catch
 const CATCH_WINDOWS: Record<number, number> = {
-  1: 500,
-  2: 400,
-  3: 350,
-  4: 300,
-  5: 500,
+  1: 600,
+  2: 500,
+  3: 450,
+  4: 400,
+  5: 600,
 }
 
 export type CatchTiming = 'perfect' | 'early' | 'miss'
@@ -129,21 +130,21 @@ export function getRequiredPickCount(stage: number, substep: number): number {
  * Time limit for a stage action (ms).
  */
 export function getTimeLimit(stage: number): number {
-  return STAGE_TIME_LIMITS[stage] ?? 8_000
+  return STAGE_TIME_LIMITS[stage] ?? 12_000
 }
 
 /**
  * Toss arc duration for a stage (ms).
  */
 export function getTossDuration(stage: number): number {
-  return TOSS_DURATIONS[stage] ?? 2400
+  return TOSS_DURATIONS[stage] ?? 3000
 }
 
 /**
  * Catch window duration for a stage (ms).
  */
 export function getCatchWindow(stage: number): number {
-  return CATCH_WINDOWS[stage] ?? 500
+  return CATCH_WINDOWS[stage] ?? 600
 }
 
 // ── State Functions ──
@@ -173,6 +174,7 @@ export function createInitialState(seed?: number): GonggiState {
     seed: s,
     triggeredChaosIds: [],
     isFlipped: false,
+    substepSnapshot: null,
   }
 }
 
@@ -190,7 +192,7 @@ export function scatterStones(state: GonggiState): GonggiState {
   }))
   // Stage 5 skips select/hold → goes directly to toss
   const nextPhase: GamePhase = state.stage === 5 ? 'toss' : 'select'
-  return { ...state, stones, phase: nextPhase, selectedStoneId: null }
+  return { ...state, stones, phase: nextPhase, selectedStoneId: null, substepSnapshot: stones.map(s => ({ ...s })) }
 }
 
 /**
@@ -330,6 +332,7 @@ export function advanceSubstep(state: GonggiState): GonggiState {
     substep: nextSubstep,
     phase: nextPhase,
     selectedStoneId: null,
+    substepSnapshot: state.stones.map(s => ({ ...s })),
   }
 }
 
@@ -378,6 +381,7 @@ export function advanceStage(state: GonggiState): GonggiState {
     selectedStoneId: null,
     triggeredChaosIds: [],
     isFlipped: false,
+    substepSnapshot: null,
   }
 }
 
@@ -421,6 +425,32 @@ export function retryStage(state: GonggiState): GonggiState {
     stones,
     substep: 0,
     phase: 'scatter',
+    tossedStoneId: null,
+    selectedStoneId: null,
+    substepSnapshot: null,
+  }
+}
+
+/**
+ * Retry from the current substep using snapshot (preserves hand stones from previous substeps).
+ * Falls back to retryStage if no snapshot exists.
+ */
+export function retrySubstep(state: GonggiState): GonggiState {
+  if (!state.substepSnapshot) {
+    return retryStage(state)
+  }
+
+  // Restore stones from snapshot
+  const stones = state.substepSnapshot.map(s => ({ ...s }))
+
+  // Determine next phase based on state
+  const hasHandStone = stones.some(s => s.status === 'hand')
+  const nextPhase: GamePhase = state.stage === 5 ? 'toss' : (hasHandStone ? 'toss' : 'select')
+
+  return {
+    ...state,
+    stones,
+    phase: nextPhase,
     tossedStoneId: null,
     selectedStoneId: null,
   }

@@ -52,7 +52,7 @@ export const constellationRule: ChaosRule = {
   id: 'constellation',
   name: '별자리 승천',
   trigger: 'after-toss',
-  minRound: 3,
+  minRound: 1,
   probability: 0.20,
   canRepeat: false,
   execute: (state, rng) => {

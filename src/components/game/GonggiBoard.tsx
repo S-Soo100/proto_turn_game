@@ -14,6 +14,7 @@ import {
   catchStone,
   advanceStage,
   retryStage,
+  retrySubstep,
   failSubstep,
   loseStone,
   getResult,
@@ -164,19 +165,16 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
 
     const selected = selectStone(state, stoneId)
     if (!selected) return
-    setGameState(selected)
-    gameStateRef.current = selected
 
-    // Auto-transition to hold after short delay
-    setTimeout(() => {
-      const current = gameStateRef.current
-      if (current.phase !== 'select' || current.selectedStoneId !== stoneId) return
-      const held = holdStone(current)
-      if (held) {
-        setGameState(held)
-        gameStateRef.current = held
-      }
-    }, 300)
+    // Instant select→hold transition
+    const held = holdStone(selected)
+    if (held) {
+      setGameState(held)
+      gameStateRef.current = held
+    } else {
+      setGameState(selected)
+      gameStateRef.current = selected
+    }
   }, [])
 
   const clearTossTimers = useCallback(() => {
@@ -283,7 +281,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
         gameStateRef.current = missState
         setTimeout(() => setCatchMessage(''), 1500)
       }
-    }, duration)
+    }, duration + 1000)
     tossTimerRef.current.push(autoMiss)
   }, [])
 
@@ -453,7 +451,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     const state = gameStateRef.current
     if (state.phase !== 'failed') return
 
-    const newState = retryStage(state)
+    const newState = retrySubstep(state)
     setGameState(newState)
     gameStateRef.current = newState
   }, [])
@@ -769,7 +767,14 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
                 })()}
               </HoldStoneLarge>
             )}
-            {!isDraggingHold && <SwipeHint>↑ 위로 스와이프</SwipeHint>}
+            {!isDraggingHold && (
+              <>
+                <TossButton onClick={(e) => { e.stopPropagation(); handleToss(); }}>
+                  던지기 🫴
+                </TossButton>
+                <SwipeHint>또는 ↑ 위로 스와이프</SwipeHint>
+              </>
+            )}
           </HoldStoneOverlay>
         )}
         {/* Hand area — shows picked/collected stones (exclude toss candidate during toss phase) */}
@@ -1143,9 +1148,26 @@ const HoldStoneGroupItem = styled.div`
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
 `
 
+const TossButton = styled.button`
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+  margin-bottom: 4px;
+  &:active {
+    transform: scale(0.95);
+    background: #2563eb;
+  }
+`
+
 const SwipeHint = styled.div`
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
   white-space: nowrap;
   pointer-events: none;
 `

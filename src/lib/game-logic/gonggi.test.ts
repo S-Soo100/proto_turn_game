@@ -13,6 +13,7 @@ import {
   checkStageComplete,
   failSubstep,
   retryStage,
+  retrySubstep,
   loseStone,
   getResult,
   updateElapsedMs,
@@ -90,9 +91,9 @@ describe('getRequiredPickCount', () => {
 })
 
 describe('getTimeLimit', () => {
-  it('stage 1 = 8000ms', () => expect(getTimeLimit(1)).toBe(8000))
-  it('stage 5 = 10000ms', () => expect(getTimeLimit(5)).toBe(10000))
-  it('invalid stage returns default 8000ms', () => expect(getTimeLimit(99)).toBe(8000))
+  it('stage 1 = 12000ms', () => expect(getTimeLimit(1)).toBe(12000))
+  it('stage 5 = 15000ms', () => expect(getTimeLimit(5)).toBe(15000))
+  it('invalid stage returns default 12000ms', () => expect(getTimeLimit(99)).toBe(12000))
 })
 
 // ── createInitialState ──
@@ -143,6 +144,11 @@ describe('createInitialState', () => {
       expect(s.y).toBeLessThanOrEqual(85)
     })
   })
+
+  it('starts with substepSnapshot null', () => {
+    const state = createInitialState(SEED)
+    expect(state.substepSnapshot).toBeNull()
+  })
 })
 
 // ── scatterStones ──
@@ -173,6 +179,14 @@ describe('scatterStones', () => {
     const state = makeState()
     const next = scatterStones(state)
     next.stones.forEach((s) => expect(s.z).toBe(0))
+  })
+
+  it('saves substepSnapshot after scatter', () => {
+    const state = makeState({ phase: 'scatter', stage: 1 })
+    const next = scatterStones(state)
+    expect(next.substepSnapshot).not.toBeNull()
+    expect(next.substepSnapshot).toHaveLength(STONE_COUNT)
+    next.substepSnapshot!.forEach((s) => expect(s.status).toBe('floor'))
   })
 })
 
@@ -399,6 +413,13 @@ describe('advanceSubstep', () => {
     const next = advanceSubstep(state)
     expect(next.phase).toBe('round-clear')
   })
+
+  it('saves substepSnapshot when advancing', () => {
+    const state = makeState({ stage: 1, substep: 0 })
+    const next = advanceSubstep(state)
+    expect(next.substepSnapshot).not.toBeNull()
+    expect(next.substepSnapshot).toHaveLength(STONE_COUNT)
+  })
 })
 
 // ── advanceStage ──
@@ -521,6 +542,60 @@ describe('retryStage', () => {
       expect(s.status).toBe('floor')
       expect(s.z).toBe(0)
     })
+  })
+})
+
+// ── retrySubstep ──
+
+describe('retrySubstep', () => {
+  it('falls back to retryStage if no snapshot', () => {
+    const state = makeState({ phase: 'failed', substepSnapshot: null })
+    const next = retrySubstep(state)
+    expect(next.substep).toBe(0)
+    expect(next.phase).toBe('scatter')
+  })
+
+  it('restores stones from snapshot', () => {
+    const snapshot = createInitialState(SEED).stones.map((s, i) =>
+      i === 0 ? { ...s, status: 'hand' as const, z: 0.3 } : s
+    )
+    const state = makeState({
+      stage: 1,
+      substep: 1,
+      phase: 'failed',
+      substepSnapshot: snapshot,
+    })
+    const next = retrySubstep(state)
+    expect(next.stones[0].status).toBe('hand')
+    expect(next.stones[0].z).toBe(0.3)
+    // Substep preserved
+    expect(next.substep).toBe(1)
+  })
+
+  it('sets phase to toss if hand stone exists in snapshot', () => {
+    const snapshot = createInitialState(SEED).stones.map((s, i) =>
+      i === 0 ? { ...s, status: 'hand' as const } : s
+    )
+    const state = makeState({
+      stage: 1,
+      substep: 1,
+      phase: 'failed',
+      substepSnapshot: snapshot,
+    })
+    const next = retrySubstep(state)
+    expect(next.phase).toBe('toss')
+  })
+
+  it('sets phase to select if no hand stone in snapshot', () => {
+    const snapshot = createInitialState(SEED).stones
+    const state = makeState({
+      stage: 1,
+      substep: 0,
+      phase: 'failed',
+      substepSnapshot: snapshot,
+    })
+    const next = retrySubstep(state)
+    expect(next.phase).toBe('select')
   })
 })
 
@@ -682,19 +757,19 @@ describe('immutability', () => {
 // ── Timing constants ──
 
 describe('getTossDuration', () => {
-  it('stage 1 = 2400ms', () => expect(getTossDuration(1)).toBe(2400))
-  it('stage 2 = 2200ms', () => expect(getTossDuration(2)).toBe(2200))
-  it('stage 3 = 2000ms', () => expect(getTossDuration(3)).toBe(2000))
-  it('stage 4 = 1800ms', () => expect(getTossDuration(4)).toBe(1800))
-  it('stage 5 = 2400ms', () => expect(getTossDuration(5)).toBe(2400))
-  it('invalid stage = 2400ms default', () => expect(getTossDuration(99)).toBe(2400))
+  it('stage 1 = 3000ms', () => expect(getTossDuration(1)).toBe(3000))
+  it('stage 2 = 2800ms', () => expect(getTossDuration(2)).toBe(2800))
+  it('stage 3 = 2600ms', () => expect(getTossDuration(3)).toBe(2600))
+  it('stage 4 = 2200ms', () => expect(getTossDuration(4)).toBe(2200))
+  it('stage 5 = 3000ms', () => expect(getTossDuration(5)).toBe(3000))
+  it('invalid stage = 3000ms default', () => expect(getTossDuration(99)).toBe(3000))
 })
 
 describe('getCatchWindow', () => {
-  it('stage 1 = 500ms', () => expect(getCatchWindow(1)).toBe(500))
-  it('stage 4 = 300ms (hardest)', () => expect(getCatchWindow(4)).toBe(300))
-  it('stage 5 = 500ms', () => expect(getCatchWindow(5)).toBe(500))
-  it('invalid stage = 500ms default', () => expect(getCatchWindow(99)).toBe(500))
+  it('stage 1 = 600ms', () => expect(getCatchWindow(1)).toBe(600))
+  it('stage 4 = 400ms (hardest)', () => expect(getCatchWindow(4)).toBe(400))
+  it('stage 5 = 600ms', () => expect(getCatchWindow(5)).toBe(600))
+  it('invalid stage = 600ms default', () => expect(getCatchWindow(99)).toBe(600))
 })
 
 // ── catchStone with timing ──

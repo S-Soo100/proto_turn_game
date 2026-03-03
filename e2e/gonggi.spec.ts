@@ -128,7 +128,7 @@ test.describe('Gonggi — Lobby', () => {
     await loginAsTestUser(page)
     await page.goto('/gonggi')
 
-    await expect(page.getByText(/라운드 3부터 변칙 룰 발동/)).toBeVisible()
+    await expect(page.getByText(/라운드 1부터 변칙 룰 발동/)).toBeVisible()
   })
 
   test('로비에 리더보드 섹션이 표시된다', async ({ page }) => {
@@ -253,8 +253,8 @@ test.describe('Gonggi — Select/Hold/Toss flow', () => {
       await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5)
     }
 
-    // Wait for auto hold transition (300ms delay)
-    await page.waitForTimeout(500)
+    // Instant select→hold transition
+    await page.waitForTimeout(150)
 
     // If a stone was hit, hold phase shows swipe hint
     // If missed, still in select phase — both are valid outcomes
@@ -279,7 +279,7 @@ test.describe('Gonggi — Select/Hold/Toss flow', () => {
     for (let i = 0; i < 5 && !holdReached; i++) {
       const xRatio = 0.2 + (i * 0.15)
       await page.mouse.click(box.x + box.width * xRatio, box.y + box.height * 0.5)
-      await page.waitForTimeout(400)
+      await page.waitForTimeout(150)
 
       holdReached = await page.getByText(/스와이프/).isVisible().catch(() => false)
     }
@@ -303,7 +303,7 @@ test.describe('Gonggi — Select/Hold/Toss flow', () => {
       const xRatio = 0.15 + (i % 3) * 0.25
       const yRatio = 0.2 + Math.floor(i / 3) * 0.25
       await page.mouse.click(box.x + box.width * xRatio, box.y + box.height * yRatio)
-      await page.waitForTimeout(400)
+      await page.waitForTimeout(150)
       holdReached = await page.getByText(/스와이프/).isVisible().catch(() => false)
     }
 
@@ -338,7 +338,7 @@ test.describe('Gonggi — Catch timing', () => {
       const xRatio = 0.15 + (i % 3) * 0.25
       const yRatio = 0.2 + Math.floor(i / 3) * 0.25
       await page.mouse.click(box.x + box.width * xRatio, box.y + box.height * yRatio)
-      await page.waitForTimeout(400)
+      await page.waitForTimeout(150)
       holdReached = await page.getByText(/스와이프/).isVisible().catch(() => false)
     }
 
@@ -351,7 +351,7 @@ test.describe('Gonggi — Catch timing', () => {
     // If in pick phase, wait for auto-miss
     const pickVisible = await page.getByText(/스와이프하세요/).isVisible().catch(() => false)
     if (pickVisible) {
-      await page.waitForTimeout(3000)
+      await page.waitForTimeout(4500)
       const failText = await page.getByText(/다시 도전/).isVisible().catch(() => false)
       if (failText) {
         await expect(page.getByText(/다시 도전/)).toBeVisible()
@@ -390,7 +390,7 @@ test.describe('Gonggi — Failure and retry', () => {
       const xRatio = 0.15 + (i % 3) * 0.25
       const yRatio = 0.2 + Math.floor(i / 3) * 0.25
       await page.mouse.click(box.x + box.width * xRatio, box.y + box.height * yRatio)
-      await page.waitForTimeout(400)
+      await page.waitForTimeout(150)
       holdReached = await page.getByText(/스와이프/).isVisible().catch(() => false)
     }
 
@@ -399,8 +399,8 @@ test.describe('Gonggi — Failure and retry', () => {
     // Toss via swipe
     await swipeToss(page)
 
-    // Wait for auto-miss timeout (toss duration is 2400ms for stage 1)
-    await page.waitForTimeout(3000)
+    // Wait for auto-miss timeout (toss duration is 3000ms + 1000ms buffer for stage 1)
+    await page.waitForTimeout(4500)
 
     // Should show failure UI or "놓쳤어요!" feedback
     const retryButton = page.getByRole('button', { name: /다시 도전/ })

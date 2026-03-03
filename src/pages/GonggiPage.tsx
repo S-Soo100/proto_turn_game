@@ -123,7 +123,7 @@ export function GonggiPage() {
           </RulesSection>
 
           <ChaosWarning>
-            ⚠️ 라운드 3부터 변칙 룰 발동!
+            ⚠️ 라운드 1부터 변칙 룰 발동!
             <br />
             <small>새가 된 공기, 고양이 습격, 가짜 클리어 등...</small>
           </ChaosWarning>

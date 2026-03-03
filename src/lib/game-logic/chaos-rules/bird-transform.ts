@@ -4,7 +4,7 @@ export const birdTransformRule: ChaosRule = {
   id: 'bird-transform',
   name: '새가 된 공기',
   trigger: 'after-toss',
-  minRound: 3,
+  minRound: 1,
   probability: 0.25,
   canRepeat: false,
   execute: (state, _rng) => {
