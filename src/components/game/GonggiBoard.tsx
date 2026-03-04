@@ -39,6 +39,7 @@ import { constellationRule } from '@/lib/game-logic/chaos-rules/constellation'
 import CatSwipeEffect from './chaos/CatSwipeEffect'
 import ConstellationEffect from './chaos/ConstellationEffect'
 import { getStoneStyle } from '@/lib/gonggi-z-axis'
+import GonggiDebugPanel from './GonggiDebugPanel'
 
 // ── Constants ──
 
@@ -79,6 +80,8 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   const [pickTimerProgress, setPickTimerProgress] = useState(1) // 1=full, 0=empty
   const [holdDragY, setHoldDragY] = useState(0)
   const [isDraggingHold, setIsDraggingHold] = useState(false)
+  const [debugForceRule, setDebugForceRule] = useState<string | null>(null)
+  const [debugChanceOverride, setDebugChanceOverride] = useState<number | null>(null)
 
   const gameStateRef = useRef(gameState)
   const startTimeRef = useRef(0)
@@ -177,7 +180,6 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   const clearTossTimers = useCallback(() => {
     tossTimerRef.current.forEach(clearTimeout)
     tossTimerRef.current = []
-    setTossAnimating(false)
     setCatchMessage('')
   }, [])
 
@@ -191,9 +193,10 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     gameStateRef.current = state
 
     // Check chaos after toss
-    const chaos = checkChaos(state, 'after-toss', ALL_CHAOS_RULES, rngRef.current)
+    const chaos = checkChaos(state, 'after-toss', ALL_CHAOS_RULES, rngRef.current, debugForceRule, debugChanceOverride)
     if (chaos) {
-      handleChaosEffect(state, chaos.result, chaos.rule)
+      if (import.meta.env.DEV && debugForceRule) setDebugForceRule(null)
+      handleChaosEffect(state, chaos.result, chaos.rule, 'after-toss')
       return
     }
 
@@ -204,9 +207,10 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
 
     // For when pick phase starts, check before-pick chaos + start pick timer
     if (state.phase === 'pick') {
-      const pickChaos = checkChaos(state, 'before-pick', ALL_CHAOS_RULES, rngRef.current)
+      const pickChaos = checkChaos(state, 'before-pick', ALL_CHAOS_RULES, rngRef.current, debugForceRule, debugChanceOverride)
       if (pickChaos) {
-        handleChaosEffect(state, pickChaos.result, pickChaos.rule)
+        if (import.meta.env.DEV && debugForceRule) setDebugForceRule(null)
+        handleChaosEffect(state, pickChaos.result, pickChaos.rule, 'before-pick')
       } else {
         startPickTimer(state)
         startTossAnimation(state)
@@ -264,11 +268,12 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     const autoMiss = setTimeout(() => {
       const current = gameStateRef.current
       if (current.phase === 'catch' || current.phase === 'pick') {
-        setTossAnimating(false)
         setCatchMessage('놓쳤어요!')
         const missState = catchStone(current.phase === 'pick'
           ? { ...current, phase: 'catch' as const }
           : current, false, 'miss')
+        // Update tossAnimating and gameState together
+        setTossAnimating(false)
         setGameState(missState)
         gameStateRef.current = missState
         setTimeout(() => setCatchMessage(''), 1500)
@@ -297,26 +302,30 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     const state = gameStateRef.current
     if (state.phase !== 'catch') return
 
-    // Catch is always allowed during catch phase (no early penalty)
+    // Clear timers but keep tossAnimating until state is updated
     clearTossTimers()
     if (pickTimerRef.current) clearInterval(pickTimerRef.current)
 
-    // Check before-success chaos
-    const chaos = checkChaos(state, 'before-success', ALL_CHAOS_RULES, rngRef.current)
-    if (chaos) {
-      handleChaosEffect(state, chaos.result, chaos.rule)
+    // Check before-success chaos — handleChaosEffect sets tossAnimating(false) internally
+    const bsChaos = checkChaos(state, 'before-success', ALL_CHAOS_RULES, rngRef.current, debugForceRule, debugChanceOverride)
+    if (bsChaos) {
+      if (import.meta.env.DEV && debugForceRule) setDebugForceRule(null)
+      handleChaosEffect(state, bsChaos.result, bsChaos.rule, 'before-success')
       return
     }
 
     const newState = catchStone(state, true, 'perfect')
+    // Update gameState and tossAnimating together so stones transition cleanly
+    setTossAnimating(false)
     setGameState(newState)
     gameStateRef.current = newState
 
     // Check stage transition chaos
     if (newState.phase === 'stage-clear') {
-      const stageChaos = checkChaos(newState, 'stage-transition', ALL_CHAOS_RULES, rngRef.current)
+      const stageChaos = checkChaos(newState, 'stage-transition', ALL_CHAOS_RULES, rngRef.current, debugForceRule, debugChanceOverride)
       if (stageChaos) {
-        handleChaosEffect(newState, stageChaos.result, stageChaos.rule)
+        if (import.meta.env.DEV && debugForceRule) setDebugForceRule(null)
+        handleChaosEffect(newState, stageChaos.result, stageChaos.rule, 'stage-transition')
         return
       }
     }
@@ -465,9 +474,13 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   // ── Chaos Handling ──
 
   const handleChaosEffect = useCallback(
-    (state: GonggiState, result: ChaosResult, rule: ChaosRule) => {
+    (state: GonggiState, result: ChaosResult, rule: ChaosRule, trigger?: string) => {
+      if (import.meta.env.DEV) {
+        console.log(`[CHAOS] rule=${rule.id} trigger=${trigger ?? '?'} round=${state.round} stage=${state.stage}`)
+      }
       // Pause toss animation during chaos
       clearTossTimers()
+      setTossAnimating(false)
       if (pickTimerRef.current) clearInterval(pickTimerRef.current)
 
       setChaosEffect(result)
@@ -639,9 +652,9 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
           <FloorSurface />
           {gameState.stones.map((stone) => {
             if (stone.status === 'lost') return null
-            // FlyingStone renders air/tossed stones at Container level
+            // Air/tossed stones are always hidden from board — rendered by FlyingStone
             const isAir = stone.status === 'air' || stone.status === 'tossed'
-            if (isAir && tossAnimating) return null
+            if (isAir) return null
             // HandArea renders hand stones during pick/catch/toss phases
             if (stone.status === 'hand' && (gameState.phase === 'pick' || gameState.phase === 'catch' || gameState.phase === 'toss')) return null
 
@@ -912,6 +925,16 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
           <StatValue>{gameState.chaosSurvived}</StatValue>
         </StatItem>
       </StatusBar>
+
+      {/* Debug panel (DEV only) */}
+      {import.meta.env.DEV && (
+        <GonggiDebugPanel
+          gameState={gameState}
+          onForceRule={setDebugForceRule}
+          onSetChanceOverride={setDebugChanceOverride}
+          chanceOverride={debugChanceOverride}
+        />
+      )}
 
       {/* Pause overlay */}
       {isPaused && (

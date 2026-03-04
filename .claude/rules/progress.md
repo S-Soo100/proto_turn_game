@@ -134,8 +134,8 @@
   - 순수 함수: createInitialState, scatterStones, startToss, pickStones, catchStone 등
   - seeded RNG (mulberry32)
 - **Chaos Engine**: `src/lib/game-logic/gonggi-chaos.ts`
-  - 라운드별 발동 확률: R1-2: 0%, R3: 30%, R4: 50%, R5+: 70~90%
-  - 7개 변칙 룰: bird-transform, cat-swipe, stone-eyes, fake-clear, split, danmaku, screen-flip
+  - 라운드별 발동 확률: R1: 15%, R2: 25%, R3: 40%, R4: 60%, R5+: 70~90%
+  - 7개 변칙 룰: bird-transform, cat-swipe, stone-eyes, fake-clear, split, constellation, screen-flip
   - 각 룰 별도 파일: `src/lib/game-logic/chaos-rules/*.ts`
 - **Component**: `src/components/game/GonggiBoard.tsx`
   - CSS 2.5D 렌더링 (x,y% 바닥좌표 + z축 높이 → translateY + scale)
@@ -143,11 +143,11 @@
   - CSS @keyframes 포물선 toss 애니메이션 (단계별 duration)
   - 타이밍 기반 catch (catchWindow, perfect/early/miss)
   - 변칙 룰 이펙트 오버레이 (AnimatePresence)
-  - 일시정지/재개, 탄막 댓글, 화면 뒤집기 CSS
+  - 일시정지/재개, 화면 뒤집기 CSS
 - **z축 유틸**: `src/lib/gonggi-z-axis.ts` — z값(0~1) → CSS transform/filter/shadow
 - **Chaos Effects**: `src/components/game/chaos/`
   - BirdTransformEffect, CatSwipeEffect, StoneEyesEffect
-  - FakeClearEffect, SplitEffect, DanmakuOverlay
+  - FakeClearEffect, SplitEffect, ConstellationEffect
 - **Page**: `src/pages/GonggiPage.tsx` — lobby/playing/result 3단계 흐름
 - **Leaderboard**: `src/lib/gonggi-leaderboard.ts` + `GonggiLeaderboard.tsx`
   - 클리어 시간 ASC 정렬, 실패 횟수, 변칙 생존 횟수 표시
@@ -224,6 +224,49 @@
 - **게임 종료 제거**: `checkGameComplete()` 미사용 (무한 라운드), `'success'` phase는 타입에만 유지
 - **테스트**: gonggi.test.ts 90개 (+5), GonggiBoard.test.tsx 15개 (+1) = **321개** (기존 315개 + 6개)
 
+### 14단계: 공기놀이 난이도 하향 + 변칙 조기 발동 + 조작 간소화 ✅
+- **변칙 확률 조기화 (Strategy A)**:
+  - `getChaosChance()`: R1: 15%, R2: 25%, R3: 40%, R4: 60%, R5+: 70~90% (기존 R1-2: 0%)
+  - 7개 변칙 룰 minRound 하향: 6개 3→1, 2개(split/screen-flip) 4→2
+  - 로비 텍스트: "라운드 3부터" → "라운드 1부터"
+- **난이도 하향 (Strategy E)**:
+  - STAGE_TIME_LIMITS 완화 (8/7/6/5/10 → 12/10/9/8/15초)
+  - TOSS_DURATIONS 완화 (2400~1800 → 3000~2200ms)
+  - CATCH_WINDOWS 완화 (500~300 → 600~400ms)
+  - auto-miss +1000ms 여유
+  - `retrySubstep()`: substep 단위 재시도 (기존 retryStage → substep 복원)
+  - `substepSnapshot: Stone[] | null` 필드 추가
+- **조작 간소화 (Strategy C)**:
+  - select→hold 즉시 전환 (기존 300ms 딜레이 제거)
+  - "던지기 🫴" 탭 버튼 추가 (스와이프 대안)
+- **테스트**: gonggi.test.ts 95개, gonggi-chaos.test.ts 39개 = **333개** (기존 321개 + 12개)
+
+### 15단계: danmaku 제거 + cat-swipe 개편 (T-GG014, T-GG015) ✅
+- **danmaku 제거 (T-GG014)**:
+  - `chaos-rules/danmaku.ts` 삭제, `chaos/DanmakuOverlay.tsx` 삭제
+  - GonggiBoard.tsx에서 danmaku 관련 코드 전면 제거 (state, ref, render, styled)
+  - 테스트에서 danmaku import/assertion 제거
+- **cat-swipe 개편 (T-GG015)**:
+  - CatSwipeEffect.tsx 전면 개편: 위→아래 직사각형 등장 + 좌→우 스와이프 + 퇴장
+  - result type: `all-stones-scattered` → `all-stones-lost`
+  - 모든 돌 lost 처리 → failSubstep() → 다시 도전 버튼
+- **테스트**: 331 unit/integration + 32 E2E (전체 통과)
+
+### 16단계: 공기놀이 디버그 모드 (T-GG016) ✅
+- **gonggi-chaos.ts 확장**:
+  - `shouldTriggerChaos`에 `overrideChance` 파라미터 추가
+  - `checkChaos`에 `forceRuleId` + `overrideChance` 파라미터 추가
+- **GonggiDebugPanel.tsx** (DEV 전용 신규 컴포넌트):
+  - 7개 변칙 룰 강제 발동 버튼
+  - 확률 슬라이더 0~100% (auto/override)
+  - 상태 모니터: round/stage/substep/phase/triggeredChaosIds
+- **GonggiBoard.tsx 디버그 통합**:
+  - `debugForceRule`, `debugChanceOverride` state
+  - checkChaos 4곳에 debug 파라미터 전달, 사용 후 자동 초기화
+  - chaos 발동 시 `[CHAOS]` 콘솔 로그 (DEV only)
+  - `import.meta.env.DEV` 가드 → 프로덕션 빌드에서 완전 tree-shake 확인
+- **테스트**: 336 unit/integration + 32 E2E (전체 통과)
+
 ## 다음 단계 (미구현 → 티켓으로 관리)
 
 기존 백로그는 `planning/` 하위의 에픽/티켓으로 관리된다:
@@ -237,6 +280,9 @@
 | E-GG001 | 공기놀이 MVP (Chaos-only) | T-GG001~T-GG008 (완료) |
 | E-GG002 | 공기놀이 UX 대개편 | T-GG009~T-GG012 (완료) |
 | — | catch 즉시 허용 + 낙하 시각 효과 | T-GG013 (완료) |
+| — | danmaku 제거 | T-GG014 (완료) |
+| — | cat-swipe 개편 | T-GG015 (완료) |
+| — | 디버그 모드 | T-GG016 (완료) |
 | E-BP001 | 블록 퍼즐 MVP | T-BP001, T-BP002, T-BP003 |
 
 ### 아직 에픽/티켓화되지 않은 항목

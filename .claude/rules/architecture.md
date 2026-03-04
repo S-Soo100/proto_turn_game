@@ -15,7 +15,7 @@
 │     └── 결과 (통계 + 저장 + 다시하기)
 ├── 공기놀이 클릭 → /gonggi (솔로, 변칙 룰 항상 적용)
 │     ├── 로비 (규칙 설명 + 클리어 랭킹 + 시작 버튼)
-│     ├── 플레이 (일단~꺾기 5단계, CSS 2.5D 렌더링, select→hold→toss→pick→catch, R3+ 변칙 룰)
+│     ├── 플레이 (일단~꺾기 5단계, CSS 2.5D 렌더링, select→hold→toss→pick→catch, R1+ 변칙 룰, DEV 디버그 패널)
 │     └── 결과 (클리어 시간 + 실패/변칙 통계 + 자동 저장)
 /login  /signup
 ```
@@ -53,15 +53,15 @@ src/
 │       ├── GomokuBoard.tsx          # 15x15 바둑판, 🐻(흑B)/🐰(백W) 이모지 돌, lastMove amber/승리 gold outline 강조
 │       ├── ReactionSpeedBoard.tsx   # 반응속도 게임 보드: HUD(타이머) + GameArea(타겟) + StatusBar(점수/콤보)
 │       ├── TargetCircle.tsx         # osu! 스타일 축소 원 타겟 (CSS @keyframes 애니메이션)
-│       ├── GonggiBoard.tsx          # 공기놀이 보드: CSS 2.5D(x,y% + z축), select/hold/toss/catch 단계, 포물선 애니메이션, 변칙 이펙트
+│       ├── GonggiBoard.tsx          # 공기놀이 보드: CSS 2.5D(x,y% + z축), select/hold/toss/catch 단계, 포물선 애니메이션, 변칙 이펙트, DEV 디버그 패널
+│       ├── GonggiDebugPanel.tsx     # 공기놀이 디버그 패널 (DEV 전용): 변칙 룰 강제 발동, 확률 오버라이드, 상태 모니터
 │       ├── GonggiLeaderboard.tsx    # 공기놀이 리더보드 테이블 (시간 ASC 정렬)
 │       └── chaos/                   # 공기놀이 변칙 룰 이펙트 컴포넌트
 │           ├── BirdTransformEffect.tsx   # 돌→🐦 모핑 + 날아감
-│           ├── CatSwipeEffect.tsx        # 🐾 페이크 성공 → 고양이 손 습격
+│           ├── CatSwipeEffect.tsx        # 위→아래 등장 + 좌→우 스와이프 고양이 발, 전 돌 lost
 │           ├── StoneEyesEffect.tsx       # 👀 돌 도망
 │           ├── FakeClearEffect.tsx       # 가짜 클리어 + VHS 되감기
 │           ├── SplitEffect.tsx           # 1→3 분열 선택
-│           ├── DanmakuOverlay.tsx        # 탄막 댓글 오버레이
 │           └── ConstellationEffect.tsx   # ✦ 별자리 승천 + 소원 선택지
 ├── hooks/
 │   └── useAuth.ts
@@ -75,16 +75,15 @@ src/
 │       ├── gomoku.ts                # GomokuState/Result + 알파베타 AI (깊이 2/4)
 │       ├── reaction-speed.ts        # 타겟 스케줄 생성 (Normal 55 + Speed 30 + Decoy 15) + 점수/콤보/등급 계산 (seeded RNG)
 │       ├── gonggi.ts                # 공기놀이: GonggiState, select/hold/toss/pick/catch 단계, 타이밍 catch, seeded RNG
-│       ├── gonggi-chaos.ts          # 변칙 룰 엔진: ChaosRule, 확률 계산, 룰 선택/적용
-│       └── chaos-rules/             # 8개 변칙 룰 정의
-│           ├── bird-transform.ts    # CR-GG001: 돌→새 변신
-│           ├── cat-swipe.ts         # CR-GG002: 고양이 습격
-│           ├── stone-eyes.ts        # CR-GG003: 돌 도망
-│           ├── fake-clear.ts        # CR-GG004: 가짜 클리어
-│           ├── split.ts             # CR-GG005: 무한 증식
-│           ├── constellation.ts     # CR-GG006: 별자리 승천 + 소원 선택
-│           ├── danmaku.ts           # CR-GG007: 관객 야유 탄막
-│           └── screen-flip.ts       # CR-GG008: 화면 뒤집기
+│       ├── gonggi-chaos.ts          # 변칙 룰 엔진: ChaosRule, 확률 계산, 룰 선택/적용, forceRuleId/overrideChance 디버그 지원
+│       └── chaos-rules/             # 7개 변칙 룰 정의
+│           ├── bird-transform.ts    # CR-GG001: 돌→새 변신 (minRound 1)
+│           ├── cat-swipe.ts         # CR-GG002: 고양이 습격 — all-stones-lost (minRound 1)
+│           ├── stone-eyes.ts        # CR-GG003: 돌 도망 (minRound 1, repeatable)
+│           ├── fake-clear.ts        # CR-GG004: 가짜 클리어 (minRound 1)
+│           ├── split.ts             # CR-GG005: 무한 증식 (minRound 2)
+│           ├── constellation.ts     # CR-GG006: 별자리 승천 + 소원 선택 (minRound 1)
+│           └── screen-flip.ts       # CR-GG008: 화면 뒤집기 (minRound 2)
 ├── pages/
 │   ├── LoginPage.tsx
 │   ├── SignupPage.tsx

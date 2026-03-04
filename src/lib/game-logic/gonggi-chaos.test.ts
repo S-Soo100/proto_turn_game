@@ -99,6 +99,19 @@ describe('shouldTriggerChaos', () => {
     expect(shouldTriggerChaos(10, makeRng(0.89))).toBe(true)
     expect(shouldTriggerChaos(10, makeRng(0.91))).toBe(false)
   })
+
+  it('uses overrideChance when provided', () => {
+    // Round 1 normally 15%, but override to 100%
+    expect(shouldTriggerChaos(1, makeRng(0.99), 1.0)).toBe(true)
+    // Override to 0%
+    expect(shouldTriggerChaos(10, makeRng(0.0), 0)).toBe(false)
+  })
+
+  it('ignores overrideChance when null', () => {
+    // null → use round-based chance (R1 = 15%)
+    expect(shouldTriggerChaos(1, makeRng(0.1), null)).toBe(true)
+    expect(shouldTriggerChaos(1, makeRng(0.2), null)).toBe(false)
+  })
 })
 
 // ── selectRule ──
@@ -239,6 +252,28 @@ describe('checkChaos', () => {
     expect(result).not.toBeNull()
     expect(result!.rule.trigger).toBe('after-toss')
     expect(result!.result.ruleId).toBe(result!.rule.id)
+  })
+
+  it('forceRuleId bypasses probability and selects the specified rule', () => {
+    const state = { ...createInitialState(SEED), round: 1 }
+    // rng = 0.99 would normally not trigger (R1 = 15%), but force overrides
+    const result = checkChaos(state, 'after-toss', ALL_RULES, makeRng(0.99), 'bird-transform')
+    expect(result).not.toBeNull()
+    expect(result!.rule.id).toBe('bird-transform')
+  })
+
+  it('forceRuleId returns null if rule not found', () => {
+    const state = { ...createInitialState(SEED), round: 1 }
+    const result = checkChaos(state, 'after-toss', ALL_RULES, makeRng(0.5), 'nonexistent')
+    expect(result).toBeNull()
+  })
+
+  it('overrideChance forces 100% trigger rate', () => {
+    const state = { ...createInitialState(SEED), round: 1 }
+    // rng = 0.99, normally won't trigger at R1 15%, but override to 100%
+    const rng = makeSequenceRng([0.99, 0.1])
+    const result = checkChaos(state, 'after-toss', ALL_RULES, rng, null, 1.0)
+    expect(result).not.toBeNull()
   })
 })
 

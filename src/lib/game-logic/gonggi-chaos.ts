@@ -44,12 +44,14 @@ export function getChaosChance(round: number): number {
 
 /**
  * Determine if chaos should trigger this action.
+ * overrideChance: if provided, use this value instead of the round-based chance.
  */
 export function shouldTriggerChaos(
   round: number,
   rng: () => number,
+  overrideChance?: number | null,
 ): boolean {
-  const chance = getChaosChance(round)
+  const chance = overrideChance != null ? overrideChance : getChaosChance(round)
   if (chance <= 0) return false
   return rng() < chance
 }
@@ -105,14 +107,26 @@ export function applyChaosToState(
 /**
  * Full chaos check: determine if chaos triggers, select a rule, execute it.
  * Returns null if no chaos triggers.
+ * forceRuleId: if provided, skip probability and force this specific rule.
+ * overrideChance: if provided, override the round-based chance value.
  */
 export function checkChaos(
   state: GonggiState,
   trigger: ChaosTrigger,
   rules: ChaosRule[],
   rng: () => number,
+  forceRuleId?: string | null,
+  overrideChance?: number | null,
 ): { result: ChaosResult; rule: ChaosRule } | null {
-  if (!shouldTriggerChaos(state.round, rng)) return null
+  // Force mode: skip probability, find and execute the specified rule directly
+  if (forceRuleId) {
+    const rule = rules.find(r => r.id === forceRuleId)
+    if (!rule) return null
+    const result = rule.execute(state, rng)
+    return { result, rule }
+  }
+
+  if (!shouldTriggerChaos(state.round, rng, overrideChance)) return null
 
   const rule = selectRule(rules, trigger, state.round, state.triggeredChaosIds, rng)
   if (!rule) return null
