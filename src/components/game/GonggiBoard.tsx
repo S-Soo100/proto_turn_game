@@ -76,6 +76,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   const [isPaused, setIsPaused] = useState(false)
   const [swipePath, setSwipePath] = useState<{ x: number; y: number }[]>([])
   const [tossAnimating, setTossAnimating] = useState(false)
+  const [flightPhase, setFlightPhase] = useState<'ascending' | 'hovering' | 'falling'>('ascending')
   const [catchMessage, setCatchMessage] = useState<string>('')
   const [pickTimerProgress, setPickTimerProgress] = useState(1) // 1=full, 0=empty
   const [holdDragY, setHoldDragY] = useState(0)
@@ -260,26 +261,40 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
 
   const startTossAnimation = useCallback((state: GonggiState) => {
     const duration = getTossDuration(state.stage)
+    const ascendTime = Math.round(duration * 0.4)
+    const hoverTime = Math.round(duration * 0.5)
+    const fallTime = 300
 
     setTossAnimating(true)
+    setFlightPhase('ascending')
     setCatchMessage('')
 
-    // Auto-miss if player doesn't catch in time
-    const autoMiss = setTimeout(() => {
+    // Phase 1→2: ascending → hovering
+    const hoverTimer = setTimeout(() => {
+      setFlightPhase('hovering')
+    }, ascendTime)
+    tossTimerRef.current.push(hoverTimer)
+
+    // Phase 2→3: hover timeout → falling (miss)
+    const fallTimer = setTimeout(() => {
       const current = gameStateRef.current
       if (current.phase === 'catch' || current.phase === 'pick') {
-        setCatchMessage('놓쳤어요!')
-        const missState = catchStone(current.phase === 'pick'
-          ? { ...current, phase: 'catch' as const }
-          : current, false, 'miss')
-        // Update tossAnimating and gameState together
-        setTossAnimating(false)
-        setGameState(missState)
-        gameStateRef.current = missState
-        setTimeout(() => setCatchMessage(''), 1500)
+        setFlightPhase('falling')
+        // After fall animation completes, trigger miss
+        const missTimer = setTimeout(() => {
+          setCatchMessage('놓쳤어요!')
+          const missState = catchStone(current.phase === 'pick'
+            ? { ...current, phase: 'catch' as const }
+            : current, false, 'miss')
+          setTossAnimating(false)
+          setGameState(missState)
+          gameStateRef.current = missState
+          setTimeout(() => setCatchMessage(''), 1500)
+        }, fallTime)
+        tossTimerRef.current.push(missTimer)
       }
-    }, duration + 1000)
-    tossTimerRef.current.push(autoMiss)
+    }, ascendTime + hoverTime)
+    tossTimerRef.current.push(fallTimer)
   }, [])
 
   const startPickTimer = useCallback((state: GonggiState) => {
@@ -788,16 +803,26 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
         )}
       </BoardArea>
 
-      {/* FlyingStone — parabolic flight at Container level */}
-      {tossAnimating && !isPaused && (
+      {/* FlyingStone — 3-phase flight: ascending → hovering → falling */}
+      {tossAnimating && !isPaused && (() => {
+        const dur = getTossDuration(gameState.stage)
+        const ascendDur = Math.round(dur * 0.4)
+        const animDuration = flightPhase === 'ascending' ? `${ascendDur}ms`
+          : flightPhase === 'hovering' ? '1200ms'
+          : '300ms'
+        const animIteration = flightPhase === 'hovering' ? 'infinite' : '1'
+        const isCatchable = gameState.phase === 'catch' && flightPhase !== 'falling'
+        return (
         <FlyingStone
-          className={gameState.phase === 'catch' ? 'catch-zone' : ''}
+          className={isCatchable ? 'catch-zone' : ''}
+          $flightPhase={flightPhase}
           style={{
-            animationDuration: `${getTossDuration(gameState.stage)}ms`,
+            animationDuration: animDuration,
             animationPlayState: isPaused ? 'paused' : 'running',
-            pointerEvents: gameState.phase === 'catch' ? 'auto' : 'none',
+            animationIterationCount: animIteration,
+            pointerEvents: isCatchable ? 'auto' : 'none',
           }}
-          onPointerDown={gameState.phase === 'catch' ? handleCatch : undefined}
+          onPointerDown={isCatchable ? handleCatch : undefined}
         >
           {gameState.stage === 5 ? (
             <FlyingStoneGroup>
@@ -813,7 +838,8 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
             })()
           )}
         </FlyingStone>
-      )}
+        )
+      })()}
 
       {/* Catch feedback */}
       {catchMessage && (
@@ -1046,13 +1072,21 @@ const FloorSurface = styled.div`
   border-radius: 16px;
 `
 
-const flightArc = keyframes`
+const flightUp = keyframes`
   0%   { top: 62%; transform: translateX(-50%) scale(1.0) rotate(0deg); }
-  35%  { top: -4%; transform: translateX(-50%) scale(0.65) rotate(-15deg); }
-  40%  { top: -4%; transform: translateX(-50%) scale(0.65) rotate(-10deg); }
-  60%  { top: 28%; transform: translateX(-48%) scale(0.78) rotate(20deg); }
-  80%  { top: 48%; transform: translateX(-52%) scale(0.88) rotate(-10deg); }
-  100% { top: 62%; transform: translateX(-50%) scale(1.0) rotate(0deg); }
+  70%  { top: 5%;  transform: translateX(-50%) scale(0.7) rotate(-15deg); }
+  100% { top: 10%; transform: translateX(-50%) scale(0.7) rotate(-5deg); }
+`
+
+const hoverFloat = keyframes`
+  0%   { top: 10%; transform: translateX(-50%) scale(0.7) rotate(-3deg); }
+  50%  { top: 7%;  transform: translateX(-50%) scale(0.73) rotate(3deg); }
+  100% { top: 10%; transform: translateX(-50%) scale(0.7) rotate(-3deg); }
+`
+
+const flightDown = keyframes`
+  0%   { top: 10%; transform: translateX(-50%) scale(0.7); opacity: 1; }
+  100% { top: 120%; transform: translateX(-50%) scale(0.5); opacity: 0; }
 `
 
 const popIn = keyframes`
@@ -1154,7 +1188,7 @@ const ActionButton = styled.button`
   }
 `
 
-const FlyingStone = styled.div`
+const FlyingStone = styled.div<{ $flightPhase: 'ascending' | 'hovering' | 'falling' }>`
   position: absolute;
   left: 50%;
   top: 62%;
@@ -1162,8 +1196,12 @@ const FlyingStone = styled.div`
   z-index: 100;
   font-size: 36px;
   pointer-events: none;
-  animation-name: ${flightArc};
-  animation-timing-function: ease-in-out;
+  animation-name: ${({ $flightPhase }) =>
+    $flightPhase === 'ascending' ? flightUp
+    : $flightPhase === 'hovering' ? hoverFloat
+    : flightDown};
+  animation-timing-function: ${({ $flightPhase }) =>
+    $flightPhase === 'ascending' ? 'ease-out' : 'ease-in-out'};
   animation-fill-mode: forwards;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
   &.catch-zone {
