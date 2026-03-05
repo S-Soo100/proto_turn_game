@@ -95,6 +95,10 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   const pickTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const holdDragStartRef = useRef<{ y: number; time: number } | null>(null)
   const lastDragPointsRef = useRef<{ y: number; time: number }[]>([])
+  const flyingStoneRef = useRef<HTMLDivElement>(null)
+  const flightAnimRef = useRef<number | null>(null)
+  const flightStartRef = useRef(0)
+  const flightPausedElapsedRef = useRef(0)
 
   gameStateRef.current = gameState
 
@@ -107,6 +111,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
       chaosTimeoutRef.current.forEach(clearTimeout)
       tossTimerRef.current.forEach(clearTimeout)
       if (pickTimerRef.current) clearInterval(pickTimerRef.current)
+      if (flightAnimRef.current) cancelAnimationFrame(flightAnimRef.current)
     }
   }, [])
 
@@ -180,6 +185,10 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   const clearTossTimers = useCallback(() => {
     tossTimerRef.current.forEach(clearTimeout)
     tossTimerRef.current = []
+    if (flightAnimRef.current) {
+      cancelAnimationFrame(flightAnimRef.current)
+      flightAnimRef.current = null
+    }
     setCatchMessage('')
   }, [])
 
@@ -260,25 +269,54 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
 
   const startTossAnimation = useCallback((state: GonggiState) => {
     const duration = getTossDuration(state.stage)
+    const START_Y = 62  // bottom of board (%)
+    const PEAK_Y = 5    // top of screen (%)
 
     setTossAnimating(true)
     setCatchMessage('')
+    flightStartRef.current = performance.now()
+    flightPausedElapsedRef.current = 0
 
-    // Auto-miss after animation completes
-    const autoMiss = setTimeout(() => {
-      const current = gameStateRef.current
-      if (current.phase === 'catch' || current.phase === 'pick') {
-        setCatchMessage('놓쳤어요!')
-        const missState = catchStone(current.phase === 'pick'
-          ? { ...current, phase: 'catch' as const }
-          : current, false, 'miss')
-        setTossAnimating(false)
-        setGameState(missState)
-        gameStateRef.current = missState
-        setTimeout(() => setCatchMessage(''), 1500)
+    const animate = () => {
+      const elapsed = performance.now() - flightStartRef.current
+      const t = Math.min(elapsed / duration, 1) // 0 → 1
+
+      // Parabola: t=0 → bottom, t=0.5 → peak, t=1 → bottom
+      const y = START_Y + (PEAK_Y - START_Y) * 4 * t * (1 - t)
+      // Scale: 1.0 at bottom, 0.65 at peak
+      const scale = 1.0 + (0.65 - 1.0) * 4 * t * (1 - t)
+      // Rotation
+      const rot = t < 0.5
+        ? -15 * Math.sin(t * Math.PI)
+        : 10 * Math.sin((t - 0.5) * 2 * Math.PI)
+
+      const el = flyingStoneRef.current
+      if (el) {
+        el.style.top = `${y}%`
+        el.style.transform = `translateX(-50%) scale(${scale.toFixed(3)}) rotate(${rot.toFixed(1)}deg)`
       }
-    }, duration)
-    tossTimerRef.current.push(autoMiss)
+
+      if (t >= 1) {
+        // Reached bottom — auto miss
+        flightAnimRef.current = null
+        const current = gameStateRef.current
+        if (current.phase === 'catch' || current.phase === 'pick') {
+          setCatchMessage('놓쳤어요!')
+          const missState = catchStone(current.phase === 'pick'
+            ? { ...current, phase: 'catch' as const }
+            : current, false, 'miss')
+          setTossAnimating(false)
+          setGameState(missState)
+          gameStateRef.current = missState
+          setTimeout(() => setCatchMessage(''), 1500)
+        }
+        return
+      }
+
+      flightAnimRef.current = requestAnimationFrame(animate)
+    }
+
+    flightAnimRef.current = requestAnimationFrame(animate)
   }, [])
 
   const startPickTimer = useCallback((state: GonggiState) => {
@@ -459,6 +497,12 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   const handlePause = useCallback(() => {
     pausedAtRef.current = performance.now()
     if (timerRef.current) clearInterval(timerRef.current)
+    // Pause flight animation
+    if (flightAnimRef.current) {
+      cancelAnimationFrame(flightAnimRef.current)
+      flightAnimRef.current = null
+      flightPausedElapsedRef.current = performance.now() - flightStartRef.current
+    }
     setIsPaused(true)
   }, [])
 
@@ -467,8 +511,47 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
       const pausedDuration = performance.now() - pausedAtRef.current
       startTimeRef.current += pausedDuration
     }
+    // Resume flight animation
+    if (tossAnimating && flightPausedElapsedRef.current > 0) {
+      flightStartRef.current = performance.now() - flightPausedElapsedRef.current
+      flightPausedElapsedRef.current = 0
+      const duration = getTossDuration(gameStateRef.current.stage)
+      const START_Y = 62
+      const PEAK_Y = 5
+      const resumeAnimate = () => {
+        const elapsed = performance.now() - flightStartRef.current
+        const t = Math.min(elapsed / duration, 1)
+        const y = START_Y + (PEAK_Y - START_Y) * 4 * t * (1 - t)
+        const scale = 1.0 + (0.65 - 1.0) * 4 * t * (1 - t)
+        const rot = t < 0.5
+          ? -15 * Math.sin(t * Math.PI)
+          : 10 * Math.sin((t - 0.5) * 2 * Math.PI)
+        const el = flyingStoneRef.current
+        if (el) {
+          el.style.top = `${y}%`
+          el.style.transform = `translateX(-50%) scale(${scale.toFixed(3)}) rotate(${rot.toFixed(1)}deg)`
+        }
+        if (t >= 1) {
+          flightAnimRef.current = null
+          const current = gameStateRef.current
+          if (current.phase === 'catch' || current.phase === 'pick') {
+            setCatchMessage('놓쳤어요!')
+            const missState = catchStone(current.phase === 'pick'
+              ? { ...current, phase: 'catch' as const }
+              : current, false, 'miss')
+            setTossAnimating(false)
+            setGameState(missState)
+            gameStateRef.current = missState
+            setTimeout(() => setCatchMessage(''), 1500)
+          }
+          return
+        }
+        flightAnimRef.current = requestAnimationFrame(resumeAnimate)
+      }
+      flightAnimRef.current = requestAnimationFrame(resumeAnimate)
+    }
     setIsPaused(false)
-  }, [])
+  }, [tossAnimating])
 
   // ── Chaos Handling ──
 
@@ -787,14 +870,14 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
         )}
       </BoardArea>
 
-      {/* FlyingStone — flies up and hovers at top until caught or miss */}
-      {tossAnimating && !isPaused && (
+      {/* FlyingStone — RAF-driven parabolic arc */}
+      {tossAnimating && (
         <FlyingStone
+          ref={flyingStoneRef}
           className={gameState.phase === 'catch' ? 'catch-zone' : ''}
           style={{
-            animationDuration: `${getTossDuration(gameState.stage)}ms`,
-            animationPlayState: isPaused ? 'paused' : 'running',
             pointerEvents: gameState.phase === 'catch' ? 'auto' : 'none',
+            visibility: isPaused ? 'visible' : 'visible',
           }}
           onPointerDown={gameState.phase === 'catch' ? handleCatch : undefined}
         >
@@ -1045,15 +1128,6 @@ const FloorSurface = styled.div`
   border-radius: 16px;
 `
 
-const flightArc = keyframes`
-  0%   { top: 62%; transform: translateX(-50%) scale(1.0) rotate(0deg); }
-  30%  { top: 5%;  transform: translateX(-50%) scale(0.7) rotate(-15deg); }
-  40%  { top: 10%; transform: translateX(-50%) scale(0.7) rotate(-3deg); }
-  55%  { top: 7%;  transform: translateX(-50%) scale(0.73) rotate(3deg); }
-  70%  { top: 10%; transform: translateX(-50%) scale(0.7) rotate(-3deg); }
-  85%  { top: 7%;  transform: translateX(-50%) scale(0.73) rotate(3deg); }
-  100% { top: 10%; transform: translateX(-50%) scale(0.7) rotate(-3deg); }
-`
 
 const popIn = keyframes`
   0%   { transform: scale(0) rotate(-15deg); opacity: 0; }
@@ -1162,9 +1236,6 @@ const FlyingStone = styled.div`
   z-index: 100;
   font-size: 36px;
   pointer-events: none;
-  animation-name: ${flightArc};
-  animation-timing-function: ease-out;
-  animation-fill-mode: forwards;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
   &.catch-zone {
     filter: drop-shadow(0 0 12px #22c55e) drop-shadow(0 0 4px #22c55e);
