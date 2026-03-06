@@ -948,7 +948,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
                   animate={{ scale: [1, 1.5, 0], rotate: [0, 0, 180], y: [0, -50, -200] }}
                   transition={{ duration: 1.5 }}
                 >
-                  <img src="/assets/effects/chaos-bird.png" alt="bird" style={{ width: 36, height: 36 }} draggable={false} />
+                  <img src="/assets/effects/chaos-bird.png" alt="bird" style={{ width: 44, height: 44 }} draggable={false} />
                 </motion.div>
                 <ChaosText>{chaosEffect.message}</ChaosText>
               </ChaosMessage>
@@ -1129,7 +1129,8 @@ const PerspectiveContainer = styled.div`
 const FloorSurface = styled.div`
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, #334155 0%, #1e293b 50%, #0f172a 100%);
+  background: url('/assets/backgrounds/gonggi-floor.png') center/cover no-repeat;
+  filter: brightness(0.55);
   transform: rotateX(15deg);
   transform-origin: center 70%;
   border-radius: 16px;
@@ -1144,11 +1145,11 @@ const popIn = keyframes`
 
 const StoneVisual = styled.div<{ $selected: boolean }>`
   position: absolute;
-  font-size: 28px;
+  font-size: 34px;
   transition: left 0.3s ease, top 0.3s ease, transform 0.3s ease, opacity 0.2s, filter 0.2s;
   pointer-events: none;
   transform-origin: center bottom;
-  img { width: 28px; height: 28px; object-fit: contain; }
+  img { width: 34px; height: 34px; object-fit: contain; }
   ${({ $selected }) => $selected && `
     filter: brightness(1.5) drop-shadow(0 0 8px #fbbf24) !important;
   `}
@@ -1177,10 +1178,10 @@ const HoldStoneOverlay = styled.div`
 `
 
 const HoldStoneLarge = styled.div`
-  font-size: 56px;
+  font-size: 68px;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
   pointer-events: none;
-  img { width: 56px; height: 56px; object-fit: contain; }
+  img { width: 68px; height: 68px; object-fit: contain; }
 `
 
 const HoldStoneGroup = styled.div`
@@ -1190,9 +1191,9 @@ const HoldStoneGroup = styled.div`
 `
 
 const HoldStoneGroupItem = styled.div`
-  font-size: 40px;
+  font-size: 48px;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
-  img { width: 40px; height: 40px; object-fit: contain; }
+  img { width: 48px; height: 48px; object-fit: contain; }
 `
 
 const TossButton = styled.button`
@@ -1244,11 +1245,11 @@ const FlyingStone = styled.div`
   top: 62%;
   transform: translateX(-50%);
   z-index: 100;
-  font-size: 36px;
+  font-size: 44px;
   pointer-events: none;
   will-change: top, transform;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
-  img { width: 36px; height: 36px; object-fit: contain; }
+  img { width: 44px; height: 44px; object-fit: contain; }
   &.catch-zone {
     filter: drop-shadow(0 0 12px #22c55e) drop-shadow(0 0 4px #22c55e);
     cursor: pointer;
@@ -1258,8 +1259,8 @@ const FlyingStone = styled.div`
 const FlyingStoneGroup = styled.div`
   display: flex;
   gap: 2px;
-  font-size: 28px;
-  img { width: 28px; height: 28px; object-fit: contain; }
+  font-size: 34px;
+  img { width: 34px; height: 34px; object-fit: contain; }
 `
 
 const HandArea = styled.div`
@@ -1278,14 +1279,14 @@ const HandArea = styled.div`
 `
 
 const HandIcon = styled.span`
-  font-size: 24px;
-  img { width: 24px; height: 24px; object-fit: contain; }
+  font-size: 29px;
+  img { width: 29px; height: 29px; object-fit: contain; }
 `
 
 const HandStone = styled.span`
-  font-size: 24px;
+  font-size: 29px;
   animation: ${popIn} 0.3s ease-out forwards;
-  img { width: 24px; height: 24px; object-fit: contain; }
+  img { width: 29px; height: 29px; object-fit: contain; }
 `
 
 const CatchFeedback = styled.div`

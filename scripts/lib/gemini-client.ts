@@ -66,7 +66,6 @@ export async function generateImage(
     config: {
       responseModalities: ['IMAGE', 'TEXT'],
       imageConfig: {
-        imageSize: imageSizeTier,
         aspectRatio: aspectRatio,
       },
     },

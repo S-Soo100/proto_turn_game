@@ -258,7 +258,19 @@ const Content = styled.div`
 
 const HeroSection = styled.div`
   text-align: center;
-  padding: 24px 0 8px;
+  padding: 32px 16px;
+  border-radius: 16px;
+  background: url('/assets/backgrounds/gonggi-lobby-bg.png') center/cover no-repeat;
+  position: relative;
+  overflow: hidden;
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.55);
+    border-radius: 16px;
+  }
+  & > * { position: relative; z-index: 1; }
 `
 
 const HeroEmoji = styled.div`
