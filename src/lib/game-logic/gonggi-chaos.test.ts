@@ -11,9 +11,7 @@ import { createInitialState } from './gonggi'
 import { birdTransformRule } from './chaos-rules/bird-transform'
 import { catSwipeRule } from './chaos-rules/cat-swipe'
 import { stoneEyesRule } from './chaos-rules/stone-eyes'
-import { fakeClearRule } from './chaos-rules/fake-clear'
 import { splitRule } from './chaos-rules/split'
-import { screenFlipRule } from './chaos-rules/screen-flip'
 import { constellationRule } from './chaos-rules/constellation'
 
 // ── Helpers ──
@@ -33,9 +31,7 @@ const ALL_RULES: ChaosRule[] = [
   birdTransformRule,
   catSwipeRule,
   stoneEyesRule,
-  fakeClearRule,
   splitRule,
-  screenFlipRule,
   constellationRule,
 ]
 
@@ -298,22 +294,10 @@ describe('rule definitions', () => {
     expect(stoneEyesRule.canRepeat).toBe(true)
   })
 
-  it('fake-clear: stage-transition, minRound 1, not repeatable', () => {
-    expect(fakeClearRule.trigger).toBe('stage-transition')
-    expect(fakeClearRule.minRound).toBe(1)
-    expect(fakeClearRule.canRepeat).toBe(false)
-  })
-
   it('split: after-toss, minRound 2, not repeatable', () => {
     expect(splitRule.trigger).toBe('after-toss')
     expect(splitRule.minRound).toBe(2)
     expect(splitRule.canRepeat).toBe(false)
-  })
-
-  it('screen-flip: stage-transition, minRound 2, not repeatable', () => {
-    expect(screenFlipRule.trigger).toBe('stage-transition')
-    expect(screenFlipRule.minRound).toBe(2)
-    expect(screenFlipRule.canRepeat).toBe(false)
   })
 
   it('constellation: after-toss, minRound 1, not repeatable', () => {
@@ -347,12 +331,6 @@ describe('rule execution', () => {
     expect(result.data?.affectedStoneIds).toBeDefined()
   })
 
-  it('fake-clear returns stage-reset type', () => {
-    const result = fakeClearRule.execute(state, rng)
-    expect(result.type).toBe('stage-reset')
-    expect(result.message).toBe('아 잠깐, 아직이요 ㅋ')
-  })
-
   it('split returns stone-split type with correctIndex 0-2', () => {
     const result = splitRule.execute(state, rng)
     expect(result.type).toBe('stone-split')
@@ -361,9 +339,4 @@ describe('rule execution', () => {
     expect(idx).toBeLessThan(3)
   })
 
-  it('screen-flip returns screen-flip type', () => {
-    const result = screenFlipRule.execute(state, rng)
-    expect(result.type).toBe('screen-flip')
-    expect(result.data?.rotation).toBe(180)
-  })
 })

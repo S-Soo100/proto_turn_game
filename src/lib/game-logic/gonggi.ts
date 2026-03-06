@@ -34,7 +34,6 @@ export interface GonggiState {
   selectedStoneId: number | null
   seed: number
   triggeredChaosIds: string[]
-  isFlipped: boolean       // screen-flip chaos
   substepSnapshot: Stone[] | null  // snapshot for substep-only retry
 }
 
@@ -173,7 +172,7 @@ export function createInitialState(seed?: number): GonggiState {
     selectedStoneId: null,
     seed: s,
     triggeredChaosIds: [],
-    isFlipped: false,
+
     substepSnapshot: null,
   }
 }
@@ -380,7 +379,7 @@ export function advanceStage(state: GonggiState): GonggiState {
     tossedStoneId: null,
     selectedStoneId: null,
     triggeredChaosIds: [],
-    isFlipped: false,
+
     substepSnapshot: null,
   }
 }

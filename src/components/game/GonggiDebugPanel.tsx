@@ -6,9 +6,7 @@ const CHAOS_RULES = [
   { id: 'bird-transform', label: 'bird-transform' },
   { id: 'cat-swipe', label: 'cat-swipe' },
   { id: 'stone-eyes', label: 'stone-eyes' },
-  { id: 'fake-clear', label: 'fake-clear' },
   { id: 'split', label: 'split' },
-  { id: 'screen-flip', label: 'screen-flip' },
   { id: 'constellation', label: 'constellation' },
 ]
 

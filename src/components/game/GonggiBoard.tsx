@@ -15,7 +15,6 @@ import {
   pickStones,
   catchStone,
   advanceStage,
-  retryStage,
   retrySubstep,
   failSubstep,
   loseStone,
@@ -34,11 +33,11 @@ import {
 import { birdTransformRule } from '@/lib/game-logic/chaos-rules/bird-transform'
 import { catSwipeRule } from '@/lib/game-logic/chaos-rules/cat-swipe'
 import { stoneEyesRule } from '@/lib/game-logic/chaos-rules/stone-eyes'
-import { fakeClearRule } from '@/lib/game-logic/chaos-rules/fake-clear'
 import { splitRule } from '@/lib/game-logic/chaos-rules/split'
-import { screenFlipRule } from '@/lib/game-logic/chaos-rules/screen-flip'
 import { constellationRule } from '@/lib/game-logic/chaos-rules/constellation'
 import CatSwipeEffect from './chaos/CatSwipeEffect'
+import StoneEyesEffect from './chaos/StoneEyesEffect'
+import SplitEffect from './chaos/SplitEffect'
 import ConstellationEffect from './chaos/ConstellationEffect'
 import { getStoneStyle } from '@/lib/gonggi-z-axis'
 import GonggiDebugPanel from './GonggiDebugPanel'
@@ -49,9 +48,7 @@ const ALL_CHAOS_RULES: ChaosRule[] = [
   birdTransformRule,
   catSwipeRule,
   stoneEyesRule,
-  fakeClearRule,
   splitRule,
-  screenFlipRule,
   constellationRule,
 ]
 
@@ -60,6 +57,14 @@ const STAGE_NAMES = ['', '일단', '이단', '삼단', '사단', '꺾기']
 const PICK_RADIUS = 10 // % of board
 const HOLD_STONE_REST_TOP_PCT = 62  // bottom-center of board (%)
 const TOSS_VELOCITY_THRESHOLD = -0.5  // px/ms (negative = upward)
+const TOSS_SAFETY_TIMEOUT_MS = 10_000
+
+const SAFETY_MESSAGES = [
+  '...어디 갔지?',
+  '돌이 우주로 갔나 봐요',
+  '중력이 고장났어요',
+  '돌이 안 내려와요 ;;;',
+]
 
 // ── Props ──
 
@@ -82,8 +87,19 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   const [pickTimerProgress, setPickTimerProgress] = useState(1) // 1=full, 0=empty
   const [holdDragY, setHoldDragY] = useState(0)
   const [isDraggingHold, setIsDraggingHold] = useState(false)
-  const [debugForceRule, setDebugForceRule] = useState<string | null>(null)
-  const [debugChanceOverride, setDebugChanceOverride] = useState<number | null>(null)
+  const [debugForceRule, _setDebugForceRule] = useState<string | null>(null)
+  const [debugChanceOverride, _setDebugChanceOverride] = useState<number | null>(null)
+  const debugForceRuleRef = useRef<string | null>(null)
+  const debugChanceOverrideRef = useRef<number | null>(null)
+
+  const setDebugForceRule = useCallback((v: string | null) => {
+    debugForceRuleRef.current = v
+    _setDebugForceRule(v)
+  }, [])
+  const setDebugChanceOverride = useCallback((v: number | null) => {
+    debugChanceOverrideRef.current = v
+    _setDebugChanceOverride(v)
+  }, [])
 
   const gameStateRef = useRef(gameState)
   const startTimeRef = useRef(0)
@@ -188,10 +204,30 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     setGameState(state)
     gameStateRef.current = state
 
+    // Safety net: if nothing happens within 10s, auto-fail
+    timerMgr.current.cancel('toss-safety')
+    timerMgr.current.addTimeout('toss-safety', () => {
+      const current = gameStateRef.current
+      if (current.phase !== 'catch' && current.phase !== 'pick') return
+      if (import.meta.env.DEV) {
+        console.log('[SAFETY] toss safety timer fired — forcing substep fail')
+      }
+      flightIdRef.current++
+      clearTossTimers()
+      timerMgr.current.cancel('pick')
+      setTossAnimating(false)
+      const msg = SAFETY_MESSAGES[Math.floor(Math.random() * SAFETY_MESSAGES.length)]
+      setCatchMessage(msg)
+      const failed = failSubstep(current)
+      setGameState(failed)
+      gameStateRef.current = failed
+      timerMgr.current.addTimeout('toss-safety-msg', () => setCatchMessage(''), 2000)
+    }, TOSS_SAFETY_TIMEOUT_MS)
+
     // Check chaos after toss
-    const chaos = checkChaos(state, 'after-toss', ALL_CHAOS_RULES, rngRef.current, debugForceRule, debugChanceOverride)
+    const chaos = checkChaos(state, 'after-toss', ALL_CHAOS_RULES, rngRef.current, debugForceRuleRef.current, debugChanceOverrideRef.current)
     if (chaos) {
-      if (import.meta.env.DEV && debugForceRule) setDebugForceRule(null)
+      if (import.meta.env.DEV && debugForceRuleRef.current) setDebugForceRule(null)
       handleChaosEffect(state, chaos.result, chaos.rule, 'after-toss')
       return
     }
@@ -203,9 +239,9 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
 
     // For when pick phase starts, check before-pick chaos + start pick timer
     if (state.phase === 'pick') {
-      const pickChaos = checkChaos(state, 'before-pick', ALL_CHAOS_RULES, rngRef.current, debugForceRule, debugChanceOverride)
+      const pickChaos = checkChaos(state, 'before-pick', ALL_CHAOS_RULES, rngRef.current, debugForceRuleRef.current, debugChanceOverrideRef.current)
       if (pickChaos) {
-        if (import.meta.env.DEV && debugForceRule) setDebugForceRule(null)
+        if (import.meta.env.DEV && debugForceRuleRef.current) setDebugForceRule(null)
         handleChaosEffect(state, pickChaos.result, pickChaos.rule, 'before-pick')
       } else {
         startPickTimer(state)
@@ -287,6 +323,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
         // Stale double-check
         if (flightIdRef.current !== currentFlightId) return false
         // Reached bottom — auto miss
+        timerMgr.current.cancel('toss-safety')
         const current = gameStateRef.current
         if (current.phase === 'catch' || current.phase === 'pick') {
           setCatchMessage('놓쳤어요!')
@@ -331,9 +368,9 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     timerMgr.current.cancelByPrefix('chaos-')
 
     // Check before-success chaos — handleChaosEffect sets tossAnimating(false) internally
-    const bsChaos = checkChaos(state, 'before-success', ALL_CHAOS_RULES, rngRef.current, debugForceRule, debugChanceOverride)
+    const bsChaos = checkChaos(state, 'before-success', ALL_CHAOS_RULES, rngRef.current, debugForceRuleRef.current, debugChanceOverrideRef.current)
     if (bsChaos) {
-      if (import.meta.env.DEV && debugForceRule) setDebugForceRule(null)
+      if (import.meta.env.DEV && debugForceRuleRef.current) setDebugForceRule(null)
       handleChaosEffect(state, bsChaos.result, bsChaos.rule, 'before-success')
       return
     }
@@ -345,9 +382,9 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
 
     // Check stage transition chaos
     if (newState.phase === 'stage-clear') {
-      const stageChaos = checkChaos(newState, 'stage-transition', ALL_CHAOS_RULES, rngRef.current, debugForceRule, debugChanceOverride)
+      const stageChaos = checkChaos(newState, 'stage-transition', ALL_CHAOS_RULES, rngRef.current, debugForceRuleRef.current, debugChanceOverrideRef.current)
       if (stageChaos) {
-        if (import.meta.env.DEV && debugForceRule) setDebugForceRule(null)
+        if (import.meta.env.DEV && debugForceRuleRef.current) setDebugForceRule(null)
         handleChaosEffect(newState, stageChaos.result, stageChaos.rule, 'stage-transition')
         return
       }
@@ -466,6 +503,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     const state = gameStateRef.current
     if (state.phase !== 'stage-clear' && state.phase !== 'round-clear') return
 
+    timerMgr.current.cancel('toss-safety')
     timerMgr.current.cancelByPrefix('chaos-')
     const newState = advanceStage(state)
     setGameState(newState)
@@ -476,6 +514,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     const state = gameStateRef.current
     if (state.phase !== 'failed') return
 
+    timerMgr.current.cancel('toss-safety')
     timerMgr.current.cancelByPrefix('chaos-')
     const newState = retrySubstep(state)
     setGameState(newState)
@@ -541,44 +580,21 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
           }, 2800)
           break
         }
-        case 'stage-reset': {
-          timerMgr.current.addTimeout('chaos-stage-reset', () => {
-            setChaosEffect(null)
-            const retried = retryStage(updatedState)
-            setGameState(retried)
-            gameStateRef.current = retried
-          }, 3800)
-          break
-        }
         case 'stones-flee': {
-          setChaosEffect(null)
+          // StoneEyesEffect will render and call handleStoneEyesComplete on finish
           setGameState(updatedState)
           gameStateRef.current = updatedState
           break
         }
         case 'stone-split': {
-          timerMgr.current.addTimeout('chaos-stone-split', () => {
-            setChaosEffect(null)
-            const afterFail = failSubstep(updatedState)
-            setGameState(afterFail)
-            gameStateRef.current = afterFail
-          }, 3000)
+          // SplitEffect handles the 3-choice interaction via handleSplitSelect/handleSplitTimeout
+          setGameState(updatedState)
+          gameStateRef.current = updatedState
           break
         }
         case 'constellation': {
           setGameState(updatedState)
           gameStateRef.current = updatedState
-          break
-        }
-        case 'screen-flip': {
-          setGameState({ ...updatedState, isFlipped: true })
-          gameStateRef.current = { ...updatedState, isFlipped: true }
-          timerMgr.current.addTimeout('chaos-screen-flip', () => {
-            setChaosEffect(null)
-            const next = advanceStage({ ...updatedState, isFlipped: true, phase: 'stage-clear' as const })
-            setGameState(next)
-            gameStateRef.current = next
-          }, 1500)
           break
         }
         default: {
@@ -620,6 +636,71 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     gameStateRef.current = after
   }, [chaosEffect])
 
+  // ── Stone-eyes callback ──
+
+  const handleStoneEyesComplete = useCallback(() => {
+    const state = gameStateRef.current
+    setChaosEffect(null)
+    const after = failSubstep(state)
+    setGameState(after)
+    gameStateRef.current = after
+  }, [])
+
+  // ── Split callbacks ──
+
+  const handleSplitSelect = useCallback(
+    (index: number) => {
+      const state = gameStateRef.current
+      const correctIndex = (chaosEffect?.data?.correctIndex as number) ?? 0
+      setChaosEffect(null)
+
+      if (index === correctIndex) {
+        // Correct — continue the toss flow (restart toss animation + safety timer)
+        timerMgr.current.cancel('toss-safety')
+        timerMgr.current.addTimeout('toss-safety', () => {
+          const cur = gameStateRef.current
+          if (cur.phase !== 'catch' && cur.phase !== 'pick') return
+          if (import.meta.env.DEV) {
+            console.log('[SAFETY] toss safety timer fired (post-split) — forcing substep fail')
+          }
+          flightIdRef.current++
+          clearTossTimers()
+          timerMgr.current.cancel('pick')
+          setTossAnimating(false)
+          const msg = SAFETY_MESSAGES[Math.floor(Math.random() * SAFETY_MESSAGES.length)]
+          setCatchMessage(msg)
+          const failed = failSubstep(cur)
+          setGameState(failed)
+          gameStateRef.current = failed
+          timerMgr.current.addTimeout('toss-safety-msg', () => setCatchMessage(''), 2000)
+        }, TOSS_SAFETY_TIMEOUT_MS)
+
+        if (state.phase === 'catch') {
+          startTossAnimation(state)
+        } else if (state.phase === 'pick') {
+          startPickTimer(state)
+          startTossAnimation(state)
+        }
+      } else {
+        // Wrong — lose the tossed stone and fail
+        const stoneId = (chaosEffect?.data?.stoneId as number) ?? 0
+        const after = loseStone(failSubstep(state), stoneId)
+        setGameState(after)
+        gameStateRef.current = after
+      }
+    },
+    [chaosEffect],
+  )
+
+  const handleSplitTimeout = useCallback(() => {
+    const state = gameStateRef.current
+    setChaosEffect(null)
+    const stoneId = (chaosEffect?.data?.stoneId as number) ?? 0
+    const after = loseStone(failSubstep(state), stoneId)
+    setGameState(after)
+    gameStateRef.current = after
+  }, [chaosEffect])
+
   // ── Helpers ──
 
   const showMessage = useCallback((msg: string) => {
@@ -650,7 +731,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   // ── Render ──
 
   return (
-    <Container style={{ transform: gameState.isFlipped ? 'rotate(180deg)' : 'none' }}>
+    <Container>
       {/* HUD */}
       <HUD>
         <HUDLeft>
@@ -863,47 +944,23 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
             {chaosEffect.animation === 'cat-swipe' && (
               <CatSwipeEffect onComplete={() => {}} />
             )}
-            {chaosEffect.animation === 'fake-clear' && (
-              <ChaosMessage>
-                <motion.div
-                  animate={{ scale: [0, 1.5, 1] }}
-                  transition={{ duration: 0.5 }}
-                  style={{ fontSize: '24px', color: '#FFD700' }}
-                >
-                  🎉 축하합니다!
-                </motion.div>
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 2 }}
-                >
-                  <ChaosText>{chaosEffect.message}</ChaosText>
-                </motion.div>
-              </ChaosMessage>
-            )}
             {chaosEffect.animation === 'split' && (
-              <ChaosMessage>
-                <motion.div
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ repeat: 2, duration: 0.3 }}
-                  style={{ fontSize: '36px' }}
-                >
-                  ✨ × 3
-                </motion.div>
-                <ChaosText>어느 게 진짜?</ChaosText>
-              </ChaosMessage>
+              <SplitEffect
+                stoneX={(boardRef.current?.clientWidth ?? 360) / 2}
+                stoneY={(boardRef.current?.clientHeight ?? 400) / 2}
+                correctIndex={(chaosEffect.data?.correctIndex as number) ?? 0}
+                onSelect={handleSplitSelect}
+                onTimeout={handleSplitTimeout}
+              />
             )}
             {chaosEffect.animation === 'stone-eyes' && (
-              <ChaosMessage>
-                <motion.div style={{ fontSize: '36px' }}>
-                  👀 !
-                </motion.div>
-              </ChaosMessage>
-            )}
-            {chaosEffect.animation === 'screen-flip' && (
-              <ChaosMessage>
-                <ChaosText>{chaosEffect.message}</ChaosText>
-              </ChaosMessage>
+              <StoneEyesEffect
+                stones={gameState.stones
+                  .filter((s) => s.status === 'floor')
+                  .map((s) => ({ id: s.id, x: s.x, y: s.y }))}
+                affectedStoneIds={(chaosEffect.data?.affectedStoneIds as number[]) ?? []}
+                onComplete={handleStoneEyesComplete}
+              />
             )}
             {chaosEffect.animation === 'constellation' && (
               <ConstellationEffect
@@ -978,7 +1035,6 @@ const Container = styled.div`
   max-width: 400px;
   margin: 0 auto;
   position: relative;
-  transition: transform 1s ease-in-out;
   user-select: none;
 `
 
@@ -1254,7 +1310,6 @@ const ChaosOverlay = styled(motion.div)`
   justify-content: center;
   background: rgba(0, 0, 0, 0.6);
   z-index: 50;
-  pointer-events: none;
 `
 
 const ChaosMessage = styled.div`

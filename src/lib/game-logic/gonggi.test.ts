@@ -484,12 +484,6 @@ describe('round loop', () => {
     })
   })
 
-  it('advanceStage from round-clear resets isFlipped to false', () => {
-    const state = makeState({ stage: MAX_STAGE, round: 1, phase: 'round-clear', isFlipped: true })
-    const next = advanceStage(state)
-    expect(next.isFlipped).toBe(false)
-  })
-
   it('supports continuous round progression R1 → R2 → R3', () => {
     // R1 round-clear
     let state = makeState({ stage: MAX_STAGE, round: 1, phase: 'round-clear' })
