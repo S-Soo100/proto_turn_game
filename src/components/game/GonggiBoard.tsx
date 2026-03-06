@@ -3,6 +3,8 @@ import styled from '@emotion/styled'
 import { keyframes } from '@emotion/react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { GonggiState, GonggiResult } from '@/lib/game-logic/gonggi'
+import { TimerManager } from '@/lib/gonggi-timer'
+import { getFlightFrame, flightFrameToCSS } from '@/lib/gonggi-flight'
 import {
   createInitialState,
   scatterStones,
@@ -86,19 +88,14 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   const gameStateRef = useRef(gameState)
   const startTimeRef = useRef(0)
   const pausedAtRef = useRef(0)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const boardRef = useRef<HTMLDivElement>(null)
   const isSwipingRef = useRef(false)
-  const chaosTimeoutRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const rngRef = useRef(() => Math.random())
-  const tossTimerRef = useRef<ReturnType<typeof setTimeout>[]>([])
-  const pickTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const holdDragStartRef = useRef<{ y: number; time: number } | null>(null)
   const lastDragPointsRef = useRef<{ y: number; time: number }[]>([])
   const flyingStoneRef = useRef<HTMLDivElement>(null)
-  const flightAnimRef = useRef<number | null>(null)
-  const flightStartRef = useRef(0)
-  const flightPausedElapsedRef = useRef(0)
+  const flightIdRef = useRef(0)
+  const timerMgr = useRef(new TimerManager())
 
   gameStateRef.current = gameState
 
@@ -106,13 +103,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   useEffect(() => {
     rngRef.current = mulberry32(gameStateRef.current.seed + Date.now())
 
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
-      chaosTimeoutRef.current.forEach(clearTimeout)
-      tossTimerRef.current.forEach(clearTimeout)
-      if (pickTimerRef.current) clearInterval(pickTimerRef.current)
-      if (flightAnimRef.current) cancelAnimationFrame(flightAnimRef.current)
-    }
+    return () => timerMgr.current.destroy()
   }, [])
 
   // ── Elapsed timer (replaces RAF game loop) ──
@@ -122,7 +113,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
       return
     }
 
-    timerRef.current = setInterval(() => {
+    timerMgr.current.addInterval('elapsed', () => {
       if (startTimeRef.current > 0) {
         const elapsed = performance.now() - startTimeRef.current
         gameStateRef.current = { ...gameStateRef.current, elapsedMs: Math.round(elapsed) }
@@ -131,7 +122,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     }, 200)
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
+      timerMgr.current.cancel('elapsed')
     }
   }, [gameState.phase, isPaused])
 
@@ -183,12 +174,8 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   }, [])
 
   const clearTossTimers = useCallback(() => {
-    tossTimerRef.current.forEach(clearTimeout)
-    tossTimerRef.current = []
-    if (flightAnimRef.current) {
-      cancelAnimationFrame(flightAnimRef.current)
-      flightAnimRef.current = null
-    }
+    timerMgr.current.cancel('flight')
+    timerMgr.current.cancelByPrefix('toss-')
     setCatchMessage('')
   }, [])
 
@@ -267,58 +254,39 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     }
   }, [handleToss])
 
-  const hideFlyingStone = useCallback(() => {
-    const el = flyingStoneRef.current
-    if (el) el.style.display = 'none'
-  }, [])
-
   const startTossAnimation = useCallback((state: GonggiState) => {
     const duration = getTossDuration(state.stage)
-    const START_Y = 62  // bottom of board (%)
-    const PEAK_Y = 5    // top of screen (%)
-
-    // Cancel any existing animation
-    if (flightAnimRef.current) {
-      cancelAnimationFrame(flightAnimRef.current)
-      flightAnimRef.current = null
-    }
+    const currentFlightId = ++flightIdRef.current
 
     setTossAnimating(true)
     setCatchMessage('')
-    flightStartRef.current = performance.now()
-    flightPausedElapsedRef.current = 0
 
-    // Show FlyingStone immediately via DOM (no React render needed)
+    // Set initial position via DOM
     const el = flyingStoneRef.current
     if (el) {
-      el.style.display = 'block'
-      el.style.top = `${START_Y}%`
-      el.style.transform = 'translateX(-50%) scale(1) rotate(0deg)'
+      const initCSS = flightFrameToCSS(getFlightFrame(0))
+      el.style.top = initCSS.top
+      el.style.transform = initCSS.transform
     }
 
-    const animate = () => {
-      const elapsed = performance.now() - flightStartRef.current
-      const t = Math.min(elapsed / duration, 1) // 0 → 1
+    timerMgr.current.addRAF('flight', (elapsed) => {
+      // Stale flight check
+      if (flightIdRef.current !== currentFlightId) return false
 
-      // Parabola: t=0 → bottom, t=0.5 → peak, t=1 → bottom
-      const y = START_Y + (PEAK_Y - START_Y) * 4 * t * (1 - t)
-      // Scale: 1.0 at bottom, 0.65 at peak
-      const scale = 1.0 + (0.65 - 1.0) * 4 * t * (1 - t)
-      // Rotation
-      const rot = t < 0.5
-        ? -15 * Math.sin(t * Math.PI)
-        : 10 * Math.sin((t - 0.5) * 2 * Math.PI)
+      const t = Math.min(elapsed / duration, 1)
+      const frame = getFlightFrame(t)
+      const css = flightFrameToCSS(frame)
 
       const flyEl = flyingStoneRef.current
       if (flyEl) {
-        flyEl.style.top = `${y}%`
-        flyEl.style.transform = `translateX(-50%) scale(${scale.toFixed(3)}) rotate(${rot.toFixed(1)}deg)`
+        flyEl.style.top = css.top
+        flyEl.style.transform = css.transform
       }
 
       if (t >= 1) {
+        // Stale double-check
+        if (flightIdRef.current !== currentFlightId) return false
         // Reached bottom — auto miss
-        flightAnimRef.current = null
-        hideFlyingStone()
         const current = gameStateRef.current
         if (current.phase === 'catch' || current.phase === 'pick') {
           setCatchMessage('놓쳤어요!')
@@ -330,13 +298,11 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
           gameStateRef.current = missState
           setTimeout(() => setCatchMessage(''), 1500)
         }
-        return
+        return false  // stop RAF
       }
 
-      flightAnimRef.current = requestAnimationFrame(animate)
-    }
-
-    flightAnimRef.current = requestAnimationFrame(animate)
+      return true  // continue RAF
+    })
   }, [])
 
   const startPickTimer = useCallback((state: GonggiState) => {
@@ -344,13 +310,12 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     const startTime = performance.now()
     setPickTimerProgress(1)
 
-    if (pickTimerRef.current) clearInterval(pickTimerRef.current)
-    pickTimerRef.current = setInterval(() => {
+    timerMgr.current.addInterval('pick', () => {
       const elapsed = performance.now() - startTime
       const progress = Math.max(0, 1 - elapsed / duration)
       setPickTimerProgress(progress)
       if (progress <= 0) {
-        if (pickTimerRef.current) clearInterval(pickTimerRef.current)
+        timerMgr.current.cancel('pick')
       }
     }, 50)
   }, [])
@@ -359,9 +324,11 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     const state = gameStateRef.current
     if (state.phase !== 'catch') return
 
-    // Clear timers but keep tossAnimating until state is updated
+    // Invalidate in-flight RAF + clear all pending timers (including stale chaos)
+    flightIdRef.current++
     clearTossTimers()
-    if (pickTimerRef.current) clearInterval(pickTimerRef.current)
+    timerMgr.current.cancel('pick')
+    timerMgr.current.cancelByPrefix('chaos-')
 
     // Check before-success chaos — handleChaosEffect sets tossAnimating(false) internally
     const bsChaos = checkChaos(state, 'before-success', ALL_CHAOS_RULES, rngRef.current, debugForceRule, debugChanceOverride)
@@ -372,8 +339,6 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     }
 
     const newState = catchStone(state, true, 'perfect')
-    // Hide FlyingStone immediately via DOM, then update React state
-    hideFlyingStone()
     setTossAnimating(false)
     setGameState(newState)
     gameStateRef.current = newState
@@ -486,7 +451,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     if (ids.length === required) {
       const newState = pickStones(state, ids)
       if (newState) {
-        if (pickTimerRef.current) clearInterval(pickTimerRef.current)
+        timerMgr.current.cancel('pick')
         setGameState(newState)
         gameStateRef.current = newState
         setSelectedStoneIds(new Set())
@@ -501,6 +466,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     const state = gameStateRef.current
     if (state.phase !== 'stage-clear' && state.phase !== 'round-clear') return
 
+    timerMgr.current.cancelByPrefix('chaos-')
     const newState = advanceStage(state)
     setGameState(newState)
     gameStateRef.current = newState
@@ -510,6 +476,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     const state = gameStateRef.current
     if (state.phase !== 'failed') return
 
+    timerMgr.current.cancelByPrefix('chaos-')
     const newState = retrySubstep(state)
     setGameState(newState)
     gameStateRef.current = newState
@@ -517,13 +484,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
 
   const handlePause = useCallback(() => {
     pausedAtRef.current = performance.now()
-    if (timerRef.current) clearInterval(timerRef.current)
-    // Pause flight animation
-    if (flightAnimRef.current) {
-      cancelAnimationFrame(flightAnimRef.current)
-      flightAnimRef.current = null
-      flightPausedElapsedRef.current = performance.now() - flightStartRef.current
-    }
+    timerMgr.current.pause()
     setIsPaused(true)
   }, [])
 
@@ -532,48 +493,9 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
       const pausedDuration = performance.now() - pausedAtRef.current
       startTimeRef.current += pausedDuration
     }
-    // Resume flight animation
-    if (tossAnimating && flightPausedElapsedRef.current > 0) {
-      flightStartRef.current = performance.now() - flightPausedElapsedRef.current
-      flightPausedElapsedRef.current = 0
-      const duration = getTossDuration(gameStateRef.current.stage)
-      const START_Y = 62
-      const PEAK_Y = 5
-      const resumeAnimate = () => {
-        const elapsed = performance.now() - flightStartRef.current
-        const t = Math.min(elapsed / duration, 1)
-        const y = START_Y + (PEAK_Y - START_Y) * 4 * t * (1 - t)
-        const scale = 1.0 + (0.65 - 1.0) * 4 * t * (1 - t)
-        const rot = t < 0.5
-          ? -15 * Math.sin(t * Math.PI)
-          : 10 * Math.sin((t - 0.5) * 2 * Math.PI)
-        const el = flyingStoneRef.current
-        if (el) {
-          el.style.top = `${y}%`
-          el.style.transform = `translateX(-50%) scale(${scale.toFixed(3)}) rotate(${rot.toFixed(1)}deg)`
-        }
-        if (t >= 1) {
-          flightAnimRef.current = null
-          hideFlyingStone()
-          const current = gameStateRef.current
-          if (current.phase === 'catch' || current.phase === 'pick') {
-            setCatchMessage('놓쳤어요!')
-            const missState = catchStone(current.phase === 'pick'
-              ? { ...current, phase: 'catch' as const }
-              : current, false, 'miss')
-            setTossAnimating(false)
-            setGameState(missState)
-            gameStateRef.current = missState
-            setTimeout(() => setCatchMessage(''), 1500)
-          }
-          return
-        }
-        flightAnimRef.current = requestAnimationFrame(resumeAnimate)
-      }
-      flightAnimRef.current = requestAnimationFrame(resumeAnimate)
-    }
+    timerMgr.current.resume()
     setIsPaused(false)
-  }, [tossAnimating])
+  }, [])
 
   // ── Chaos Handling ──
 
@@ -582,11 +504,12 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
       if (import.meta.env.DEV) {
         console.log(`[CHAOS] rule=${rule.id} trigger=${trigger ?? '?'} round=${state.round} stage=${state.stage}`)
       }
-      // Pause toss animation during chaos
+      // Cancel any pending chaos + toss timers, then show new chaos
+      timerMgr.current.cancelByPrefix('chaos-')
+      flightIdRef.current++
       clearTossTimers()
-      hideFlyingStone()
       setTossAnimating(false)
-      if (pickTimerRef.current) clearInterval(pickTimerRef.current)
+      timerMgr.current.cancel('pick')
 
       setChaosEffect(result)
       const updatedState = applyChaosToState(state, result, rule.id)
@@ -595,12 +518,11 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
         case 'stone-lost': {
           const stoneId = (result.data?.stoneId as number) ?? 0
           const afterLoss = loseStone(failSubstep(updatedState), stoneId)
-          const tid = setTimeout(() => {
+          timerMgr.current.addTimeout('chaos-stone-lost', () => {
             setChaosEffect(null)
             setGameState(afterLoss)
             gameStateRef.current = afterLoss
           }, 2000)
-          chaosTimeoutRef.current.push(tid)
           break
         }
         case 'all-stones-lost': {
@@ -612,22 +534,20 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
             }
           })
           const afterFail = failSubstep(afterLoss)
-          const tid = setTimeout(() => {
+          timerMgr.current.addTimeout('chaos-all-stones-lost', () => {
             setChaosEffect(null)
             setGameState(afterFail)
             gameStateRef.current = afterFail
           }, 2800)
-          chaosTimeoutRef.current.push(tid)
           break
         }
         case 'stage-reset': {
-          const tid = setTimeout(() => {
+          timerMgr.current.addTimeout('chaos-stage-reset', () => {
             setChaosEffect(null)
             const retried = retryStage(updatedState)
             setGameState(retried)
             gameStateRef.current = retried
           }, 3800)
-          chaosTimeoutRef.current.push(tid)
           break
         }
         case 'stones-flee': {
@@ -637,13 +557,12 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
           break
         }
         case 'stone-split': {
-          const tid = setTimeout(() => {
+          timerMgr.current.addTimeout('chaos-stone-split', () => {
             setChaosEffect(null)
             const afterFail = failSubstep(updatedState)
             setGameState(afterFail)
             gameStateRef.current = afterFail
           }, 3000)
-          chaosTimeoutRef.current.push(tid)
           break
         }
         case 'constellation': {
@@ -654,20 +573,18 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
         case 'screen-flip': {
           setGameState({ ...updatedState, isFlipped: true })
           gameStateRef.current = { ...updatedState, isFlipped: true }
-          const tid = setTimeout(() => {
+          timerMgr.current.addTimeout('chaos-screen-flip', () => {
             setChaosEffect(null)
             const next = advanceStage({ ...updatedState, isFlipped: true, phase: 'stage-clear' as const })
             setGameState(next)
             gameStateRef.current = next
           }, 1500)
-          chaosTimeoutRef.current.push(tid)
           break
         }
         default: {
           setGameState(updatedState)
           gameStateRef.current = updatedState
-          const tid = setTimeout(() => setChaosEffect(null), 2000)
-          chaosTimeoutRef.current.push(tid)
+          timerMgr.current.addTimeout('chaos-default', () => setChaosEffect(null), 2000)
         }
       }
     },
@@ -893,12 +810,13 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
         )}
       </BoardArea>
 
-      {/* FlyingStone — always mounted, visibility controlled via ref (display: none/block) */}
+      {/* FlyingStone — always mounted, visibility controlled via React state */}
       <FlyingStone
         ref={flyingStoneRef}
         className={gameState.phase === 'catch' ? 'catch-zone' : ''}
         style={{
-          display: 'none',
+          visibility: tossAnimating ? 'visible' : 'hidden',
+          opacity: tossAnimating ? 1 : 0,
           pointerEvents: gameState.phase === 'catch' ? 'auto' : 'none',
         }}
         onPointerDown={gameState.phase === 'catch' ? handleCatch : undefined}
