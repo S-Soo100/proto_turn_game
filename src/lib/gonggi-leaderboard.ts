@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { logSupabaseError } from './error-logger'
 
 export interface GonggiLeaderboardEntry {
   id: string
@@ -23,7 +24,7 @@ export async function fetchGonggiTopScores(
     .limit(limit)
 
   if (error) {
-    console.error('Failed to fetch gonggi leaderboard:', error)
+    logSupabaseError(error, 'gonggi-leaderboard/fetchTopScores')
     return []
   }
 
@@ -65,7 +66,7 @@ export async function saveGonggiScore(
   })
 
   if (error) {
-    console.error('Failed to save gonggi score:', error)
+    logSupabaseError(error, 'gonggi-leaderboard/saveScore')
     return false
   }
   return true

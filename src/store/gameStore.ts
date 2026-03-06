@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
+import { logSupabaseError } from '@/lib/error-logger'
 import {
   createInitialState as createTicTacToeState,
   applyMove as applyTicTacToeMove,
@@ -75,7 +76,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       .select()
       .single()
 
-    if (error) throw error
+    if (error) { logSupabaseError(error, 'gameStore/startNewGame'); throw error }
 
     set({ game: data as Game, boardState: initial, result: null, opponentProfile: null })
     return data.id as string
@@ -99,7 +100,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       .select()
       .single()
 
-    if (error) throw error
+    if (error) { logSupabaseError(error, 'gameStore/createPvpGame'); throw error }
 
     set({ game: data as Game, boardState: initial, result: null, opponentProfile: null })
     return data.id as string
@@ -118,7 +119,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       .select()
       .single()
 
-    if (error) throw error
+    if (error) { logSupabaseError(error, 'gameStore/joinGame'); throw error }
 
     const game = data as Game
     const boardState = parseBoardState(game)
@@ -139,7 +140,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       .eq('id', gameId)
       .single()
 
-    if (error) throw error
+    if (error) { logSupabaseError(error, 'gameStore/loadGame'); throw error }
 
     const game = data as Game
     const boardState = parseBoardState(game)

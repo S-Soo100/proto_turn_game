@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { User, Session } from '@supabase/supabase-js'
 import type { Profile } from '@/types/database'
 import { supabase } from '@/lib/supabase'
+import { logSupabaseError } from '@/lib/error-logger'
 
 interface AuthState {
   user: User | null
@@ -38,7 +39,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .update(updates)
       .eq('id', profile.id)
 
-    if (error) throw error
+    if (error) { logSupabaseError(error, 'authStore/updateProfile'); throw error }
 
     set({ profile: { ...profile, ...updates } })
   },

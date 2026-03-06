@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/authStore'
+import { logSupabaseError } from '@/lib/error-logger'
 import type { Profile } from '@/types/database'
 
 export function useAuth() {
@@ -35,12 +36,13 @@ export function useAuth() {
   }, [])
 
   async function fetchProfile(userId: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single()
 
+    if (error) logSupabaseError(error, 'useAuth/fetchProfile')
     setProfile(data as Profile | null)
     setLoading(false)
   }

@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { logSupabaseError } from './error-logger'
 
 export interface LeaderboardEntry {
   id: string
@@ -26,7 +27,7 @@ export async function fetchTopScores(
     .limit(limit)
 
   if (error) {
-    console.error('Failed to fetch leaderboard:', error)
+    logSupabaseError(error, 'leaderboard/fetchTopScores')
     return []
   }
 
@@ -72,7 +73,7 @@ export async function saveScore(
   })
 
   if (error) {
-    console.error('Failed to save score:', error)
+    logSupabaseError(error, 'leaderboard/saveScore')
     return false
   }
   return true

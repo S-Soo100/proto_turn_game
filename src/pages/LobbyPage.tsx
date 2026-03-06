@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import styled from '@emotion/styled'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
+import { logSupabaseError } from '@/lib/error-logger'
 import { useAuthStore } from '@/store/authStore'
 import { useGameStore } from '@/store/gameStore'
 
@@ -277,7 +278,7 @@ export function LobbyPage() {
 
   // Fetch waiting games
   async function fetchRooms() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('games')
       .select('id, created_at, player_white, profiles!games_player_white_fkey(username)')
       .eq('status', 'waiting')
@@ -285,6 +286,7 @@ export function LobbyPage() {
       .order('created_at', { ascending: false })
       .limit(20)
 
+    if (error) logSupabaseError(error, 'LobbyPage/fetchRooms')
     if (data) setRooms(data as unknown as WaitingGame[])
   }
 
