@@ -188,7 +188,7 @@ test.describe('Gonggi — Game play UI', () => {
     await startGame(page)
 
     for (const emoji of ['🟡', '🔴', '🔵', '🟢', '🟣']) {
-      await expect(page.getByText(emoji)).toBeVisible({ timeout: 3000 })
+      await expect(page.getByText(emoji).first()).toBeVisible({ timeout: 3000 })
     }
   })
 

@@ -50,12 +50,12 @@ describe('GonggiBoard', () => {
 
   it('renders stone emojis on the board', () => {
     render(<GonggiBoard onGameEnd={onGameEnd} onQuit={onQuit} />)
-    // Stones should be rendered as CSS-positioned elements
-    expect(screen.getByText('🟡')).toBeInTheDocument()
-    expect(screen.getByText('🔴')).toBeInTheDocument()
-    expect(screen.getByText('🔵')).toBeInTheDocument()
-    expect(screen.getByText('🟢')).toBeInTheDocument()
-    expect(screen.getByText('🟣')).toBeInTheDocument()
+    // Stones should be rendered as CSS-positioned elements (FlyingStone also renders one hidden)
+    expect(screen.getAllByText('🟡').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('🔴').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('🔵').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('🟢').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('🟣').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders status bar with round, fail, chaos stats', () => {
@@ -109,7 +109,7 @@ describe('GonggiBoard', () => {
     render(<GonggiBoard onGameEnd={onGameEnd} onQuit={onQuit} />)
     const emojis = ['🟡', '🔴', '🔵', '🟢', '🟣']
     emojis.forEach((emoji) => {
-      expect(screen.getByText(emoji)).toBeInTheDocument()
+      expect(screen.getAllByText(emoji).length).toBeGreaterThanOrEqual(1)
     })
   })
 

@@ -267,15 +267,34 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     }
   }, [handleToss])
 
+  const hideFlyingStone = useCallback(() => {
+    const el = flyingStoneRef.current
+    if (el) el.style.display = 'none'
+  }, [])
+
   const startTossAnimation = useCallback((state: GonggiState) => {
     const duration = getTossDuration(state.stage)
     const START_Y = 62  // bottom of board (%)
     const PEAK_Y = 5    // top of screen (%)
 
+    // Cancel any existing animation
+    if (flightAnimRef.current) {
+      cancelAnimationFrame(flightAnimRef.current)
+      flightAnimRef.current = null
+    }
+
     setTossAnimating(true)
     setCatchMessage('')
     flightStartRef.current = performance.now()
     flightPausedElapsedRef.current = 0
+
+    // Show FlyingStone immediately via DOM (no React render needed)
+    const el = flyingStoneRef.current
+    if (el) {
+      el.style.display = 'block'
+      el.style.top = `${START_Y}%`
+      el.style.transform = 'translateX(-50%) scale(1) rotate(0deg)'
+    }
 
     const animate = () => {
       const elapsed = performance.now() - flightStartRef.current
@@ -290,15 +309,16 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
         ? -15 * Math.sin(t * Math.PI)
         : 10 * Math.sin((t - 0.5) * 2 * Math.PI)
 
-      const el = flyingStoneRef.current
-      if (el) {
-        el.style.top = `${y}%`
-        el.style.transform = `translateX(-50%) scale(${scale.toFixed(3)}) rotate(${rot.toFixed(1)}deg)`
+      const flyEl = flyingStoneRef.current
+      if (flyEl) {
+        flyEl.style.top = `${y}%`
+        flyEl.style.transform = `translateX(-50%) scale(${scale.toFixed(3)}) rotate(${rot.toFixed(1)}deg)`
       }
 
       if (t >= 1) {
         // Reached bottom — auto miss
         flightAnimRef.current = null
+        hideFlyingStone()
         const current = gameStateRef.current
         if (current.phase === 'catch' || current.phase === 'pick') {
           setCatchMessage('놓쳤어요!')
@@ -352,7 +372,8 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
     }
 
     const newState = catchStone(state, true, 'perfect')
-    // Update gameState and tossAnimating together so stones transition cleanly
+    // Hide FlyingStone immediately via DOM, then update React state
+    hideFlyingStone()
     setTossAnimating(false)
     setGameState(newState)
     gameStateRef.current = newState
@@ -533,6 +554,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
         }
         if (t >= 1) {
           flightAnimRef.current = null
+          hideFlyingStone()
           const current = gameStateRef.current
           if (current.phase === 'catch' || current.phase === 'pick') {
             setCatchMessage('놓쳤어요!')
@@ -562,6 +584,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
       }
       // Pause toss animation during chaos
       clearTossTimers()
+      hideFlyingStone()
       setTossAnimating(false)
       if (pickTimerRef.current) clearInterval(pickTimerRef.current)
 
@@ -870,32 +893,30 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
         )}
       </BoardArea>
 
-      {/* FlyingStone — RAF-driven parabolic arc */}
-      {tossAnimating && (
-        <FlyingStone
-          ref={flyingStoneRef}
-          className={gameState.phase === 'catch' ? 'catch-zone' : ''}
-          style={{
-            pointerEvents: gameState.phase === 'catch' ? 'auto' : 'none',
-            visibility: isPaused ? 'visible' : 'visible',
-          }}
-          onPointerDown={gameState.phase === 'catch' ? handleCatch : undefined}
-        >
-          {gameState.stage === 5 ? (
-            <FlyingStoneGroup>
-              {gameState.stones.filter(s => s.status === 'air' || s.status === 'tossed').map(s => (
-                <span key={s.id}>{STONE_EMOJIS[s.id % STONE_EMOJIS.length]}</span>
-              ))}
-            </FlyingStoneGroup>
-          ) : (
-            (() => {
-              const airStone = gameState.stones.find(s => s.status === 'air' || s.status === 'tossed')
-              const id = airStone?.id ?? gameState.selectedStoneId ?? 0
-              return STONE_EMOJIS[id % STONE_EMOJIS.length]
-            })()
-          )}
-        </FlyingStone>
-      )}
+      {/* FlyingStone — always mounted, visibility controlled via ref (display: none/block) */}
+      <FlyingStone
+        ref={flyingStoneRef}
+        className={gameState.phase === 'catch' ? 'catch-zone' : ''}
+        style={{
+          display: 'none',
+          pointerEvents: gameState.phase === 'catch' ? 'auto' : 'none',
+        }}
+        onPointerDown={gameState.phase === 'catch' ? handleCatch : undefined}
+      >
+        {gameState.stage === 5 ? (
+          <FlyingStoneGroup>
+            {gameState.stones.filter(s => s.status === 'air' || s.status === 'tossed').map(s => (
+              <span key={s.id}>{STONE_EMOJIS[s.id % STONE_EMOJIS.length]}</span>
+            ))}
+          </FlyingStoneGroup>
+        ) : (
+          (() => {
+            const airStone = gameState.stones.find(s => s.status === 'air' || s.status === 'tossed')
+            const id = airStone?.id ?? gameState.selectedStoneId ?? 0
+            return STONE_EMOJIS[id % STONE_EMOJIS.length]
+          })()
+        )}
+      </FlyingStone>
 
       {/* Catch feedback */}
       {catchMessage && (
@@ -1236,6 +1257,7 @@ const FlyingStone = styled.div`
   z-index: 100;
   font-size: 36px;
   pointer-events: none;
+  will-change: top, transform;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
   &.catch-zone {
     filter: drop-shadow(0 0 12px #22c55e) drop-shadow(0 0 4px #22c55e);
