@@ -49,10 +49,10 @@ export default function CatSwipeEffect({ onComplete }: Props) {
             transition={{ duration: 0.35, ease: 'easeOut' }}
           >
             <PawPads>
-              <Pad>🐾</Pad>
-              <Pad>🐾</Pad>
-              <Pad>🐾</Pad>
-              <Pad>🐾</Pad>
+              <Pad><img src="/assets/effects/chaos-cat-paw.png" alt="paw" style={{ width: 28, height: 28 }} draggable={false} /></Pad>
+              <Pad><img src="/assets/effects/chaos-cat-paw.png" alt="paw" style={{ width: 28, height: 28 }} draggable={false} /></Pad>
+              <Pad><img src="/assets/effects/chaos-cat-paw.png" alt="paw" style={{ width: 28, height: 28 }} draggable={false} /></Pad>
+              <Pad><img src="/assets/effects/chaos-cat-paw.png" alt="paw" style={{ width: 28, height: 28 }} draggable={false} /></Pad>
             </PawPads>
           </PawBar>
         )}
@@ -66,10 +66,10 @@ export default function CatSwipeEffect({ onComplete }: Props) {
             transition={{ duration: 0.55, ease: 'easeInOut' }}
           >
             <PawPads>
-              <Pad>🐾</Pad>
-              <Pad>🐾</Pad>
-              <Pad>🐾</Pad>
-              <Pad>🐾</Pad>
+              <Pad><img src="/assets/effects/chaos-cat-paw.png" alt="paw" style={{ width: 28, height: 28 }} draggable={false} /></Pad>
+              <Pad><img src="/assets/effects/chaos-cat-paw.png" alt="paw" style={{ width: 28, height: 28 }} draggable={false} /></Pad>
+              <Pad><img src="/assets/effects/chaos-cat-paw.png" alt="paw" style={{ width: 28, height: 28 }} draggable={false} /></Pad>
+              <Pad><img src="/assets/effects/chaos-cat-paw.png" alt="paw" style={{ width: 28, height: 28 }} draggable={false} /></Pad>
             </PawPads>
           </PawBar>
         )}
@@ -83,10 +83,10 @@ export default function CatSwipeEffect({ onComplete }: Props) {
             transition={{ duration: 0.25, ease: 'easeIn' }}
           >
             <PawPads>
-              <Pad>🐾</Pad>
-              <Pad>🐾</Pad>
-              <Pad>🐾</Pad>
-              <Pad>🐾</Pad>
+              <Pad><img src="/assets/effects/chaos-cat-paw.png" alt="paw" style={{ width: 28, height: 28 }} draggable={false} /></Pad>
+              <Pad><img src="/assets/effects/chaos-cat-paw.png" alt="paw" style={{ width: 28, height: 28 }} draggable={false} /></Pad>
+              <Pad><img src="/assets/effects/chaos-cat-paw.png" alt="paw" style={{ width: 28, height: 28 }} draggable={false} /></Pad>
+              <Pad><img src="/assets/effects/chaos-cat-paw.png" alt="paw" style={{ width: 28, height: 28 }} draggable={false} /></Pad>
             </PawPads>
           </PawBar>
         )}

@@ -40,7 +40,7 @@ export default function StoneEyesEffect({ stones, affectedStoneIds, onComplete }
               animate={{ scale: 1 }}
               transition={{ duration: 0.2, delay: id * 0.05 }}
             >
-              <Eyes>👀</Eyes>
+              <Eyes><img src="/assets/effects/chaos-eyes.png" alt="eyes" style={{ width: 16, height: 16 }} draggable={false} /></Eyes>
               {showExclamation && (
                 <Exclamation
                   initial={{ opacity: 0, y: 5 }}

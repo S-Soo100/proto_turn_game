@@ -42,7 +42,7 @@ export default function BirdTransformEffect({ stoneX, stoneY, onComplete }: Prop
             transition={{ duration: phase === 'fly' ? 0.8 : 0.3, ease: 'easeOut' }}
             exit={{ opacity: 0 }}
           >
-            🐦
+            <img src="/assets/effects/chaos-bird.png" alt="bird" style={{ width: 36, height: 36 }} draggable={false} />
           </Bird>
         )}
 
@@ -66,7 +66,7 @@ export default function BirdTransformEffect({ stoneX, stoneY, onComplete }: Prop
                 }}
                 transition={{ duration: 1, ease: 'easeIn' }}
               >
-                🪶
+                <img src="/assets/effects/chaos-feather.png" alt="feather" style={{ width: 18, height: 18 }} draggable={false} />
               </Feather>
             ))}
           </>

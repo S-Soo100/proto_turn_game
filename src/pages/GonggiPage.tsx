@@ -87,7 +87,7 @@ export function GonggiPage() {
 
         <Content>
           <HeroSection>
-            <HeroEmoji>🫴</HeroEmoji>
+            <HeroEmoji><img src="/assets/icons/gonggi-game-icon.png" alt="gonggi" style={{ width: 56, height: 56 }} /></HeroEmoji>
             <HeroTitle>열받는 공기놀이</HeroTitle>
             <HeroDesc>
               돌을 골라 → 던지고 → 바닥 돌을 잡으세요!
@@ -138,7 +138,7 @@ export function GonggiPage() {
             )}
           </LeaderboardSection>
 
-          <BigStartButton onClick={handleStart}>게임 시작 🫴</BigStartButton>
+          <BigStartButton onClick={handleStart}>게임 시작</BigStartButton>
         </Content>
       </Page>
     )
@@ -169,7 +169,7 @@ export function GonggiPage() {
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.2, type: 'spring', stiffness: 300, damping: 25 }}
             >
-              <ResultEmoji>🎉</ResultEmoji>
+              <ResultEmoji><img src="/assets/effects/chaos-confetti.png" alt="confetti" style={{ width: 48, height: 48 }} /></ResultEmoji>
               <ResultTitle>전체 클리어!</ResultTitle>
 
               <ClearTime>{formatTime(result.clearTimeMs)}</ClearTime>

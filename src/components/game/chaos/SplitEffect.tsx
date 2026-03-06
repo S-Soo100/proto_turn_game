@@ -53,7 +53,7 @@ export default function SplitEffect({ stoneX, stoneY, correctIndex, onSelect, on
             animate={{ scale: [1, 1.3, 0.8] }}
             transition={{ duration: 0.3 }}
           >
-            ✨
+            <img src="/assets/effects/chaos-sparkle.png" alt="sparkle" style={{ width: 32, height: 32 }} draggable={false} />
           </SplitOrigin>
         )}
 
@@ -80,7 +80,7 @@ export default function SplitEffect({ stoneX, stoneY, correctIndex, onSelect, on
               onClick={() => handleSelect(i)}
               $clickable={phase === 'choose'}
             >
-              🟡
+              <img src="/assets/sprites/gonggi-stone-yellow.png" alt="stone" style={{ width: 28, height: 28 }} draggable={false} />
               {phase === 'result' && selectedIndex === i && (
                 <ResultBadge $correct={isCorrect}>
                   {isCorrect ? '정답!' : '땡!'}

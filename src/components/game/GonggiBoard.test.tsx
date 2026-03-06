@@ -48,14 +48,14 @@ describe('GonggiBoard', () => {
     expect(screen.queryByText(/던지기/)).not.toBeInTheDocument()
   })
 
-  it('renders stone emojis on the board', () => {
+  it('renders stone images on the board', () => {
     render(<GonggiBoard onGameEnd={onGameEnd} onQuit={onQuit} />)
-    // Stones should be rendered as CSS-positioned elements (FlyingStone also renders one hidden)
-    expect(screen.getAllByText('🟡').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('🔴').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('🔵').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('🟢').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('🟣').length).toBeGreaterThanOrEqual(1)
+    // Stones should be rendered as <img> elements with alt text
+    expect(screen.getAllByAltText('yellow').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByAltText('red').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByAltText('blue').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByAltText('green').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByAltText('purple').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders status bar with round, fail, chaos stats', () => {
@@ -105,11 +105,11 @@ describe('GonggiBoard', () => {
     expect(zeroValues.length).toBeGreaterThanOrEqual(2) // fail and chaos both 0
   })
 
-  it('renders all 5 stone emojis', () => {
+  it('renders all 5 stone images', () => {
     render(<GonggiBoard onGameEnd={onGameEnd} onQuit={onQuit} />)
-    const emojis = ['🟡', '🔴', '🔵', '🟢', '🟣']
-    emojis.forEach((emoji) => {
-      expect(screen.getAllByText(emoji).length).toBeGreaterThanOrEqual(1)
+    const colors = ['yellow', 'red', 'blue', 'green', 'purple']
+    colors.forEach((color) => {
+      expect(screen.getAllByAltText(color).length).toBeGreaterThanOrEqual(1)
     })
   })
 

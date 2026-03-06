@@ -52,7 +52,19 @@ const ALL_CHAOS_RULES: ChaosRule[] = [
   constellationRule,
 ]
 
-const STONE_EMOJIS = ['🟡', '🔴', '🔵', '🟢', '🟣']
+const STONE_IMAGES = [
+  '/assets/sprites/gonggi-stone-yellow.png',
+  '/assets/sprites/gonggi-stone-red.png',
+  '/assets/sprites/gonggi-stone-blue.png',
+  '/assets/sprites/gonggi-stone-green.png',
+  '/assets/sprites/gonggi-stone-purple.png',
+]
+const STONE_NAMES = ['yellow', 'red', 'blue', 'green', 'purple']
+
+function StoneImg({ id, className }: { id: number; className?: string }) {
+  const idx = id % STONE_IMAGES.length
+  return <img src={STONE_IMAGES[idx]} alt={STONE_NAMES[idx]} className={className} draggable={false} />
+}
 const STAGE_NAMES = ['', '일단', '이단', '삼단', '사단', '꺾기']
 const PICK_RADIUS = 10 // % of board
 const HOLD_STONE_REST_TOP_PCT = 62  // bottom-center of board (%)
@@ -87,7 +99,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   const [pickTimerProgress, setPickTimerProgress] = useState(1) // 1=full, 0=empty
   const [holdDragY, setHoldDragY] = useState(0)
   const [isDraggingHold, setIsDraggingHold] = useState(false)
-  const [debugForceRule, _setDebugForceRule] = useState<string | null>(null)
+  const [_debugForceRule, _setDebugForceRule] = useState<string | null>(null)
   const [debugChanceOverride, _setDebugChanceOverride] = useState<number | null>(null)
   const debugForceRuleRef = useRef<string | null>(null)
   const debugChanceOverrideRef = useRef<number | null>(null)
@@ -775,7 +787,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
                 }}
                 $selected={isSelected}
               >
-                {STONE_EMOJIS[stone.id % STONE_EMOJIS.length]}
+                <StoneImg id={stone.id} />
               </StoneVisual>
             )
           })}
@@ -831,7 +843,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
               <HoldStoneGroup>
                 {gameState.stones.map((stone) => (
                   <HoldStoneGroupItem key={stone.id}>
-                    {STONE_EMOJIS[stone.id % STONE_EMOJIS.length]}
+                    <StoneImg id={stone.id} />
                   </HoldStoneGroupItem>
                 ))}
               </HoldStoneGroup>
@@ -840,7 +852,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
                 {(() => {
                   const stoneId = gameState.selectedStoneId
                     ?? gameState.stones.find(s => s.status === 'hand')?.id
-                  return stoneId != null ? STONE_EMOJIS[stoneId % STONE_EMOJIS.length] : ''
+                  return stoneId != null ? <StoneImg id={stoneId} /> : null
                 })()}
               </HoldStoneLarge>
             )}
@@ -866,9 +878,9 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
           if (handStones.length === 0 || !showPhase || isPaused) return null
           return (
             <HandArea>
-              <HandIcon>🤚</HandIcon>
+              <HandIcon><img src="/assets/ui/gonggi-hand-open.png" alt="hand" draggable={false} /></HandIcon>
               {handStones.map(s => (
-                <HandStone key={s.id}>{STONE_EMOJIS[s.id % STONE_EMOJIS.length]}</HandStone>
+                <HandStone key={s.id}><StoneImg id={s.id} /></HandStone>
               ))}
             </HandArea>
           )
@@ -905,14 +917,14 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
         {gameState.stage === 5 ? (
           <FlyingStoneGroup>
             {gameState.stones.filter(s => s.status === 'air' || s.status === 'tossed').map(s => (
-              <span key={s.id}>{STONE_EMOJIS[s.id % STONE_EMOJIS.length]}</span>
+              <span key={s.id}><StoneImg id={s.id} /></span>
             ))}
           </FlyingStoneGroup>
         ) : (
           (() => {
             const airStone = gameState.stones.find(s => s.status === 'air' || s.status === 'tossed')
             const id = airStone?.id ?? gameState.selectedStoneId ?? 0
-            return STONE_EMOJIS[id % STONE_EMOJIS.length]
+            return <StoneImg id={id} />
           })()
         )}
       </FlyingStone>
@@ -936,7 +948,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
                   animate={{ scale: [1, 1.5, 0], rotate: [0, 0, 180], y: [0, -50, -200] }}
                   transition={{ duration: 1.5 }}
                 >
-                  🐦
+                  <img src="/assets/effects/chaos-bird.png" alt="bird" style={{ width: 36, height: 36 }} draggable={false} />
                 </motion.div>
                 <ChaosText>{chaosEffect.message}</ChaosText>
               </ChaosMessage>
@@ -1136,6 +1148,7 @@ const StoneVisual = styled.div<{ $selected: boolean }>`
   transition: left 0.3s ease, top 0.3s ease, transform 0.3s ease, opacity 0.2s, filter 0.2s;
   pointer-events: none;
   transform-origin: center bottom;
+  img { width: 28px; height: 28px; object-fit: contain; }
   ${({ $selected }) => $selected && `
     filter: brightness(1.5) drop-shadow(0 0 8px #fbbf24) !important;
   `}
@@ -1167,6 +1180,7 @@ const HoldStoneLarge = styled.div`
   font-size: 56px;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
   pointer-events: none;
+  img { width: 56px; height: 56px; object-fit: contain; }
 `
 
 const HoldStoneGroup = styled.div`
@@ -1178,6 +1192,7 @@ const HoldStoneGroup = styled.div`
 const HoldStoneGroupItem = styled.div`
   font-size: 40px;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+  img { width: 40px; height: 40px; object-fit: contain; }
 `
 
 const TossButton = styled.button`
@@ -1233,6 +1248,7 @@ const FlyingStone = styled.div`
   pointer-events: none;
   will-change: top, transform;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+  img { width: 36px; height: 36px; object-fit: contain; }
   &.catch-zone {
     filter: drop-shadow(0 0 12px #22c55e) drop-shadow(0 0 4px #22c55e);
     cursor: pointer;
@@ -1243,6 +1259,7 @@ const FlyingStoneGroup = styled.div`
   display: flex;
   gap: 2px;
   font-size: 28px;
+  img { width: 28px; height: 28px; object-fit: contain; }
 `
 
 const HandArea = styled.div`
@@ -1262,11 +1279,13 @@ const HandArea = styled.div`
 
 const HandIcon = styled.span`
   font-size: 24px;
+  img { width: 24px; height: 24px; object-fit: contain; }
 `
 
 const HandStone = styled.span`
   font-size: 24px;
   animation: ${popIn} 0.3s ease-out forwards;
+  img { width: 24px; height: 24px; object-fit: contain; }
 `
 
 const CatchFeedback = styled.div`
