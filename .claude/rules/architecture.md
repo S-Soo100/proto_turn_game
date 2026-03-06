@@ -53,16 +53,16 @@ src/
 │       ├── GomokuBoard.tsx          # 15x15 바둑판, 🐻(흑B)/🐰(백W) 이모지 돌, lastMove amber/승리 gold outline 강조
 │       ├── ReactionSpeedBoard.tsx   # 반응속도 게임 보드: HUD(타이머) + GameArea(타겟) + StatusBar(점수/콤보)
 │       ├── TargetCircle.tsx         # osu! 스타일 축소 원 타겟 (CSS @keyframes 애니메이션)
-│       ├── GonggiBoard.tsx          # 공기놀이 보드: CSS 2.5D(x,y% + z축), select/hold/toss/catch 단계, 포물선 애니메이션, 변칙 이펙트, DEV 디버그 패널
+│       ├── GonggiBoard.tsx          # 공기놀이 보드: CSS 2.5D(x,y% + z축), select/hold/toss/catch 단계, 포물선 애니메이션, 이미지 에셋 렌더링, 변칙 이펙트, DEV 디버그 패널
 │       ├── GonggiDebugPanel.tsx     # 공기놀이 디버그 패널 (DEV 전용): 변칙 룰 강제 발동, 확률 오버라이드, 상태 모니터
 │       ├── GonggiLeaderboard.tsx    # 공기놀이 리더보드 테이블 (시간 ASC 정렬)
-│       └── chaos/                   # 공기놀이 변칙 룰 이펙트 컴포넌트
-│           ├── BirdTransformEffect.tsx   # 돌→🐦 모핑 + 날아감
+│       └── chaos/                   # 공기놀이 변칙 룰 이펙트 컴포넌트 (이미지 에셋 기반)
+│           ├── BirdTransformEffect.tsx   # 돌→새 모핑 + 포물선 비행 + 날갯짓 + sparkle 잔상
 │           ├── CatSwipeEffect.tsx        # 위→아래 등장 + 좌→우 스와이프 고양이 발, 전 돌 lost
-│           ├── StoneEyesEffect.tsx       # 👀 돌 도망
+│           ├── StoneEyesEffect.tsx       # 눈알 이미지 돌 도망
 │           ├── FakeClearEffect.tsx       # 가짜 클리어 + VHS 되감기
-│           ├── SplitEffect.tsx           # 1→3 분열 선택
-│           └── ConstellationEffect.tsx   # ✦ 별자리 승천 + 소원 선택지
+│           ├── SplitEffect.tsx           # 야바위 셸게임 (컵 셔플 + 선택)
+│           └── ConstellationEffect.tsx   # 별자리 승천 + 소원 선택지
 ├── hooks/
 │   └── useAuth.ts
 ├── lib/
@@ -70,6 +70,8 @@ src/
 │   ├── leaderboard.ts               # 솔로 게임 랭킹: fetchTopScores, fetchMyBest, saveScore
 │   ├── gonggi-leaderboard.ts       # 공기놀이 전용 리더보드: fetchGonggiTopScores, fetchGonggiMyBest, saveGonggiScore
 │   ├── gonggi-z-axis.ts            # z축 CSS 유틸리티: getStoneStyle(z) → translateY + scale + shadow
+│   ├── gonggi-timer.ts             # 공기놀이 타이머 매니저 (setTimeout 래퍼, pause/resume)
+│   ├── gonggi-flight.ts            # 공기놀이 포물선 비행 프레임 계산
 │   └── game-logic/
 │       ├── tictactoe.ts             # 순수 게임 로직 + 미니맥스 AI
 │       ├── gomoku.ts                # GomokuState/Result + 알파베타 AI (깊이 2/4)
@@ -155,4 +157,19 @@ planning/
 │   ├── tickets/
 │   └── usecases/
 └── archive/               # 기존 00~07 기획 문서 보관
+
+scripts/                              # 빌드/유틸리티 스크립트
+├── generate-asset.ts                 # Gemini API 단일 이미지 생성 CLI
+├── generate-batch.ts                 # 프리셋/카테고리별 배치 생성
+├── remove-bg.ts                      # sharp 기반 흰색/체커보드 배경 투명화
+└── lib/
+    ├── gemini-client.ts              # Gemini API 래퍼 (generateImage)
+    └── presets.ts                    # 에셋 프리셋 정의 (20개, Magic Orb 컨셉)
+
+public/assets/                        # 게임 이미지 에셋 (Gemini 생성 + 배경 제거)
+├── sprites/                          # 돌 5종 (gonggi-stone-{color}.png)
+├── backgrounds/                      # 바닥 텍스처, 로비 배경
+├── ui/                               # 손 아이콘 3종 (open/catch/toss)
+├── effects/                          # 변칙 이펙트 8종 (bird, bird-fly, feather 등)
+└── icons/                            # 게임 아이콘, 트로피
 ```

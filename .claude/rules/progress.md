@@ -267,6 +267,30 @@
   - `import.meta.env.DEV` 가드 → 프로덕션 빌드에서 완전 tree-shake 확인
 - **테스트**: 336 unit/integration + 32 E2E (전체 통과)
 
+### 17단계: 공기놀이 이미지 에셋 시스템 (T-GG026, T-GG027) ✅
+- **에셋 생성 파이프라인**: Gemini API 기반 이미지 생성 자동화
+  - `scripts/generate-asset.ts` — 단일 에셋 생성 CLI
+  - `scripts/generate-batch.ts` — 배치 생성 (프리셋/카테고리)
+  - `scripts/lib/presets.ts` — 19+1개 에셋 프리셋 (Magic Orb 컨셉)
+  - `scripts/lib/gemini-client.ts` — Gemini API 래퍼
+  - `scripts/remove-bg.ts` — sharp 기반 흰색/체커보드 배경 투명화
+- **이모지 → 이미지 전면 교체** (T-GG026):
+  - 돌 5종: Magic Orb 컨셉 (노랑/별, 빨강/하트, 파랑/눈꽃, 초록/새싹, 보라/달)
+  - 손 아이콘 3종: open, catch, toss
+  - 변칙 이펙트 7종: bird, feather, cat-paw, eyes, sparkle, confetti, star
+  - 배경 2종: 나무 마루 바닥, 한옥방 로비
+  - 아이콘 2종: 게임 아이콘, 트로피
+  - GonggiBoard: `StoneImg` 컴포넌트 + styled `img` sizing
+  - chaos/ 이펙트 5개: 이모지 → `<img>` 교체
+  - GonggiPage: 로비 히어로, 결과 이모지 교체
+- **배경 에셋 적용 + 새 비행 연출** (T-GG027):
+  - 게임 보드 바닥: CSS 그라데이션 → `gonggi-floor.png` 텍스처 (`brightness(0.55)`)
+  - 로비 히어로: CSS 단색 → `gonggi-lobby-bg.png` + 반투명 오버레이
+  - `BirdTransformEffect` 전면 리팩토링: morph(반짝 파티클) → fly(포물선 + 날갯짓 + sparkle 잔상) → feather → message
+  - `chaos-bird-fly.png` 신규 생성 (날개 편 비행 자세 참새)
+  - 모든 게임 요소 크기 20%+ 증가 (돌 28→34, fly 36→44, hold 56→68 등)
+- **테스트**: 366 unit/integration (전체 통과)
+
 ## 다음 단계 (미구현 → 티켓으로 관리)
 
 기존 백로그는 `planning/` 하위의 에픽/티켓으로 관리된다:
@@ -283,6 +307,8 @@
 | — | danmaku 제거 | T-GG014 (완료) |
 | — | cat-swipe 개편 | T-GG015 (완료) |
 | — | 디버그 모드 | T-GG016 (완료) |
+| — | 이미지 에셋 생성 + 적용 | T-GG026 (완료) |
+| — | 배경 적용 + 새 비행 연출 + 크기 증가 | T-GG027 (완료) |
 | E-BP001 | 블록 퍼즐 MVP | T-BP001, T-BP002, T-BP003 |
 
 ### 아직 에픽/티켓화되지 않은 항목
