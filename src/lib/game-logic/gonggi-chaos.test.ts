@@ -331,10 +331,11 @@ describe('rule execution', () => {
     expect(result.data?.affectedStoneIds).toBeDefined()
   })
 
-  it('split returns stone-split type with correctIndex 0-2', () => {
+  it('split returns stone-split type with hiddenIndex 0-2 and cupCount 3', () => {
     const result = splitRule.execute(state, rng)
     expect(result.type).toBe('stone-split')
-    const idx = result.data?.correctIndex as number
+    expect(result.data?.cupCount).toBe(3)
+    const idx = result.data?.hiddenIndex as number
     expect(idx).toBeGreaterThanOrEqual(0)
     expect(idx).toBeLessThan(3)
   })

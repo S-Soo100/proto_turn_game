@@ -661,45 +661,14 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
   // ── Split callbacks ──
 
   const handleSplitSelect = useCallback(
-    (index: number) => {
+    (_index: number) => {
+      // 야바위: always rigged to fail — lose the tossed stone
       const state = gameStateRef.current
-      const correctIndex = (chaosEffect?.data?.correctIndex as number) ?? 0
       setChaosEffect(null)
-
-      if (index === correctIndex) {
-        // Correct — continue the toss flow (restart toss animation + safety timer)
-        timerMgr.current.cancel('toss-safety')
-        timerMgr.current.addTimeout('toss-safety', () => {
-          const cur = gameStateRef.current
-          if (cur.phase !== 'catch' && cur.phase !== 'pick') return
-          if (import.meta.env.DEV) {
-            console.log('[SAFETY] toss safety timer fired (post-split) — forcing substep fail')
-          }
-          flightIdRef.current++
-          clearTossTimers()
-          timerMgr.current.cancel('pick')
-          setTossAnimating(false)
-          const msg = SAFETY_MESSAGES[Math.floor(Math.random() * SAFETY_MESSAGES.length)]
-          setCatchMessage(msg)
-          const failed = failSubstep(cur)
-          setGameState(failed)
-          gameStateRef.current = failed
-          timerMgr.current.addTimeout('toss-safety-msg', () => setCatchMessage(''), 2000)
-        }, TOSS_SAFETY_TIMEOUT_MS)
-
-        if (state.phase === 'catch') {
-          startTossAnimation(state)
-        } else if (state.phase === 'pick') {
-          startPickTimer(state)
-          startTossAnimation(state)
-        }
-      } else {
-        // Wrong — lose the tossed stone and fail
-        const stoneId = (chaosEffect?.data?.stoneId as number) ?? 0
-        const after = loseStone(failSubstep(state), stoneId)
-        setGameState(after)
-        gameStateRef.current = after
-      }
+      const stoneId = (chaosEffect?.data?.stoneId as number) ?? 0
+      const after = loseStone(failSubstep(state), stoneId)
+      setGameState(after)
+      gameStateRef.current = after
     },
     [chaosEffect],
   )
@@ -958,9 +927,7 @@ export default function GonggiBoard({ onGameEnd, onQuit }: Props) {
             )}
             {chaosEffect.animation === 'split' && (
               <SplitEffect
-                stoneX={(boardRef.current?.clientWidth ?? 360) / 2}
-                stoneY={(boardRef.current?.clientHeight ?? 400) / 2}
-                correctIndex={(chaosEffect.data?.correctIndex as number) ?? 0}
+                stoneId={(chaosEffect.data?.stoneId as number) ?? 0}
                 onSelect={handleSplitSelect}
                 onTimeout={handleSplitTimeout}
               />
